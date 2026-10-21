@@ -1,0 +1,10 @@
+// Public signing defaults. To run on a device, create Local.xcconfig next to this file
+// (it is git-ignored) with your own values, for example:
+//
+//   DEVELOPMENT_TEAM = ABCDE12345
+//   PRODUCT_BUNDLE_IDENTIFIER = com.yourname.ARPoseCapture
+
+DEVELOPMENT_TEAM =
+PRODUCT_BUNDLE_IDENTIFIER = com.example.ARPoseCapture
+
+#include? "Local.xcconfig"

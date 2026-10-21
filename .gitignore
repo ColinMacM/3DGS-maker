@@ -1,0 +1,13 @@
+# Receiver output, including the Wi-Fi pairing key
+captures/
+
+# Personal signing (team and bundle ID); see Signing.xcconfig
+Local.xcconfig
+
+# Xcode per-user state and build output
+xcuserdata/
+DerivedData/
+build/
+
+.DS_Store
+__pycache__/
