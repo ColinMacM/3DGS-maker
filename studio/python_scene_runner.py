@@ -81,6 +81,12 @@ def main() -> None:
             raise TypeError("visible must be a boolean")
         scene["layers"][name] = visible
 
+    def set_splat_visible(visible: bool) -> None:
+        set_layer("catalogVisuals", visible)
+
+    def set_table_visible(visible: bool) -> None:
+        set_layer("parametricModel", visible)
+
 
     def add_measurement(
         start: list[float] | tuple[float, float, float],
@@ -372,6 +378,8 @@ def main() -> None:
         "set_table": set_table,
         "set_table_transform": set_table_transform,
         "set_layer": set_layer,
+        "set_splat_visible": set_splat_visible,
+        "set_table_visible": set_table_visible,
         "add_measurement": add_measurement,
         "remove_measurement": remove_measurement,
         "upsert_entity": upsert_entity,

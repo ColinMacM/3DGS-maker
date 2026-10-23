@@ -30,8 +30,8 @@ bun run serve
 ## Workflow
 
 - Review the built-in SH0 `.spz` capture; the aligned fullbright GLB is its browser fallback.
-- Edit the fixture table dimensions, hole grid, and canonical transform in metres. The generated parametric table starts hidden because the captured table is already present in the scan.
-- Toggle catalog scan visuals, generated parametric geometry, collision proxies, local references, and measurements independently.
+- Use the always-visible **Splat** and **Table** viewport toggles to compare the capture with the generated fixture. The generated table starts hidden because the captured table is already present in the scan.
+- Toggle collision proxies, local references, and measurements independently from the layer panels.
 - Add local `.ply`, `.splat`, `.ksplat`, `.spz`, `.glb`, or `.obj` references. Spark is loaded only when a splat is requested.
 - Splats above 250,000 Gaussians receive a worker-built LOD and render against a 250,000-splat budget so the editor remains responsive while retaining the complete source file.
 - Use Select, Move, Rotate, Measure, orthographic views, Focus, undo, and redo directly in the viewport.
@@ -108,6 +108,17 @@ print(f"updated {fixture_id}")
 ```
 
 `upsert_entity()` accepts the complete entity dictionary for capabilities not covered by a convenience helper. The convenience helpers are `add_box`, `add_sphere`, `add_cylinder`, `add_capsule`, `add_model`, `add_group`, and `add_label`. Use `move_entity`, `set_entity_visible`, and `remove_entity` for lifecycle changes. Existing helpers remain available for the table, layers, and measurements.
+
+Agents can switch between the captured splat and generated table with direct scene
+function calls:
+
+```python
+set_splat_visible(False)
+set_table_visible(True)
+```
+
+Both functions require a boolean and update the same durable visibility state as
+the viewport toolbar. `set_layer()` remains available for generic layer changes.
 
 Run a file or pipe a script:
 

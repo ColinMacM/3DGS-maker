@@ -231,9 +231,14 @@
   .viewport-toolbar__group button + button { border-left: 0; }
   .viewport-toolbar button.is-active { color: var(--selection); background: var(--active); box-shadow: inset 0 -2px var(--selection); }
   .compact-mode-tools { display: none; }
-  .collision-toggle { display: flex; gap: 6px; align-items: center; }
-  .collision-toggle span { width: 9px; height: 9px; border: 1px solid var(--collision); }
-  .collision-toggle.is-active { color: var(--collision); background: var(--active); }
+  .layer-toggle { display: flex; gap: 6px; align-items: center; }
+  .layer-toggle span { width: 9px; height: 9px; border: 1px solid currentColor; }
+  .layer-toggle--splat { color: var(--selection); }
+  .layer-toggle--splat span { border-radius: 50%; }
+  .layer-toggle--table { color: var(--datum); }
+  .layer-toggle--collisions { color: var(--collision); }
+  .layer-toggle.is-active { background: var(--active); box-shadow: inset 0 -2px currentColor; }
+  .layer-toggle.is-active span { background: currentColor; }
 
   .viewport-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; outline: none; background: var(--workbench); }
   .viewport-stage > :first-child { width: 100%; height: 100%; outline: none; }
@@ -383,7 +388,7 @@
     .build-panel { z-index: 60; }
     .compact-mode-tools { display: flex; }
     .compact-mode-tools button { font-size: 10px; }
-    .collision-toggle { font-size: 10px; }
+    .layer-toggle { font-size: 10px; }
   }
 
   @media (max-width: 600px) {
@@ -394,7 +399,7 @@
     .command-actions .mobile-panel-button::after { display: grid; place-items: center; text-indent: 0; content: "I"; }
     .viewport-toolbar { gap: 4px; overflow-x: auto; }
     .compact-mode-tools button { padding: 0 6px; }
-    .collision-toggle { padding: 0 5px !important; }
+    .layer-toggle { padding: 0 5px !important; }
     .datum-origin { padding: 0 8px; font-size: 0; }
     .coordinate-readout { flex: 1; }
     .coordinate-readout div { flex: 1; min-width: 0; padding: 0 4px; }

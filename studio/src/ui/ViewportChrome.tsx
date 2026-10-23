@@ -2,10 +2,14 @@ import type { ToolMode, ViewportStatus } from "../domain/types";
 
 interface ViewportToolbarProps {
   mode: ToolMode;
+  splatVisible: boolean;
+  tableVisible: boolean;
   collisionsVisible: boolean;
   onModeChange(mode: ToolMode): void;
   onView(view: "perspective" | "top" | "front" | "right"): void;
   onFocus(): void;
+  onToggleSplat(): void;
+  onToggleTable(): void;
   onToggleCollisions(): void;
 }
 
@@ -22,7 +26,11 @@ export function ViewportToolbar(props: ViewportToolbarProps) {
         <button type="button" onClick={() => props.onView("right")} title="Right view (3)">Right</button>
         <button type="button" onClick={props.onFocus} title="Focus viewport (F)">Focus</button>
       </div>
-      <button type="button" className={props.collisionsVisible ? "collision-toggle is-active" : "collision-toggle"} aria-pressed={props.collisionsVisible} onClick={props.onToggleCollisions}><span aria-hidden="true" />Collisions</button>
+      <div className="viewport-toolbar__group visibility-tools" aria-label="Scene visibility">
+        <button type="button" className={`layer-toggle layer-toggle--splat${props.splatVisible ? " is-active" : ""}`} aria-pressed={props.splatVisible} onClick={props.onToggleSplat} title="Show or hide the captured SPZ"><span aria-hidden="true" />Splat</button>
+        <button type="button" className={`layer-toggle layer-toggle--table${props.tableVisible ? " is-active" : ""}`} aria-pressed={props.tableVisible} onClick={props.onToggleTable} title="Show or hide the generated table"><span aria-hidden="true" />Table</button>
+        <button type="button" className={`layer-toggle layer-toggle--collisions${props.collisionsVisible ? " is-active" : ""}`} aria-pressed={props.collisionsVisible} onClick={props.onToggleCollisions} title="Show or hide collision proxies"><span aria-hidden="true" />Collisions</button>
+      </div>
     </div>
   );
 }

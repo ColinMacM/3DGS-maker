@@ -390,10 +390,14 @@ export function App() {
         <main className="viewport-region">
           <ViewportToolbar
             mode={mode}
+            splatVisible={studioDocument.layers.catalogVisuals}
+            tableVisible={studioDocument.layers.parametricModel}
             collisionsVisible={studioDocument.layers.collisions}
             onModeChange={setMode}
             onView={setView}
             onFocus={() => viewportRef.current?.focus()}
+            onToggleSplat={() => setLayer("catalogVisuals", !studioDocument.layers.catalogVisuals)}
+            onToggleTable={() => setLayer("parametricModel", !studioDocument.layers.parametricModel)}
             onToggleCollisions={() => setLayer("collisions", !studioDocument.layers.collisions)}
           />
           <div className="viewport-stage">

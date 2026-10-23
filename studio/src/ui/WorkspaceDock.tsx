@@ -24,8 +24,8 @@ interface WorkspaceDockProps {
 }
 
 const layerLabels: Record<keyof LayerVisibility, string> = {
-  catalogVisuals: "Catalog scan + model",
-  parametricModel: "Parametric table",
+  catalogVisuals: "Captured splat",
+  parametricModel: "Generated table",
   collisions: "Collision proxies",
   reference: "Local references",
   measurements: "Measurements",
