@@ -24,6 +24,8 @@ Table dimensions:
 - Top: `0.762 × 1.3716 × 0.1016 m` (30 × 54 × 4 inches)
 - Hole diameter: `0.01905 m` (3/4 inch)
 - Hole pitch: `0.0508 m` (2 inches)
+- Hole grid: `26 × 14` centers, matching the captured top and its four perforated edges
+- Frame: `0.072 m` square legs, lower square-tube rails, caster mounts, and wheels measured from the aligned reconstruction
 
 ## Physics representation
 

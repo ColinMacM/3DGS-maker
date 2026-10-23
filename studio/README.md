@@ -30,7 +30,7 @@ bun run serve
 ## Workflow
 
 - Review the built-in SH0 `.spz` capture; the aligned fullbright GLB is its browser fallback.
-- Edit the fixture table dimensions, hole grid, and canonical transform in metres. The generated parametric table starts hidden because the captured table is already present in the scan.
+- Edit the captured fixture dimensions, 26 × 14 hole grid, mobile square-tube frame, and canonical transform in metres. The generated parametric table starts hidden because the captured table is already present in the scan.
 - Toggle catalog scan visuals, generated parametric geometry, collision proxies, local references, and measurements independently.
 - Add local `.ply`, `.splat`, `.ksplat`, `.spz`, `.glb`, or `.obj` references. Spark is loaded only when a splat is requested.
 - Splats above 250,000 Gaussians receive a worker-built LOD and render against a 250,000-splat budget so the editor remains responsive while retaining the complete source file.

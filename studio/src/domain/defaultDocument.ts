@@ -25,9 +25,9 @@ export function createDefaultStudioDocument(now = new Date()): StudioDocument {
       holeDiameter: 0.01905,
       holePitch: 0.0508,
       rows: 26,
-      columns: 13,
+      columns: 14,
       edgeToHole: 0.0508,
-      legSize: 0.0508,
+      legSize: 0.072,
     },
     tableTransform: {
       position: [...IDENTITY_TRANSFORM.position],
