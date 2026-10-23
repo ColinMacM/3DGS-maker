@@ -16,7 +16,7 @@ export function createDefaultStudioDocument(now = new Date()): StudioDocument {
     units: "m",
     upAxis: "Z",
     assetId: "welding-cell",
-    assetVersion: "1.1.0",
+    assetVersion: "1.2.0",
     table: {
       width: 0.762,
       length: 1.3716,
@@ -36,7 +36,7 @@ export function createDefaultStudioDocument(now = new Date()): StudioDocument {
     },
     layers: {
       catalogVisuals: true,
-      parametricModel: true,
+      parametricModel: false,
       collisions: false,
       reference: true,
       measurements: true,

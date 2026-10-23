@@ -17,7 +17,7 @@ Metric, Z-up assets reconstructed against the captured workcell Gaussian splat. 
 
 The exported frame places the floor at `z = 0` and the table top at `z = 0.6477 m`. `+X` crosses the 30-inch table width; `+Y` follows the 54-inch table length.
 
-The SPZ is the 1,338,528-Gaussian refined capture, compressed as legacy-gzip SPZ v3 at SH degree 0. Its transform into the canonical workcell frame is recorded in `manifest.json`, `studio.asset.json`, and the root catalog. The OBJ/GLB/Blender/simulator geometry is the semantic approximation aligned to that capture; the SPZ itself is visual reference data, not collision geometry.
+The SPZ is the 1,338,528-Gaussian refined capture, compressed as legacy-gzip SPZ v3 at SH degree 0. Its transform into the canonical workcell frame is recorded in `manifest.json`, `studio.asset.json`, and the root catalog. Workcell Studio displays this scan and loads the aligned GLB only if the SPZ fails; its generated parametric table starts hidden because the scan already contains the captured table. The OBJ/GLB/Blender/simulator geometry is the semantic approximation aligned to that capture; the SPZ itself is visual reference data, not collision geometry.
 
 Table dimensions:
 

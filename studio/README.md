@@ -1,6 +1,6 @@
 # Workcell Studio
 
-Local-first browser editor for the metric, Z-up welding-cell environment in `assets/welding_cell`. The catalog loads the captured workcell as compressed SPZ alongside the aligned semantic GLB; Blender remains the canonical source for derived meshes and collision proxies. The scene intentionally excludes the robot, URDF, articulation, controllers, and hardware access.
+Local-first browser editor for the metric, Z-up welding-cell environment in `assets/welding_cell`. The catalog displays the captured workcell SPZ and retains the aligned semantic GLB as a fallback if the scan cannot load; Blender remains the canonical source for derived meshes and collision proxies. The scene intentionally excludes the robot, URDF, articulation, controllers, and hardware access.
 
 ## Run locally
 
@@ -29,9 +29,9 @@ bun run serve
 
 ## Workflow
 
-- Review the built-in SH0 `.spz` capture together with the aligned fullbright GLB.
-- Edit the fixture table dimensions, hole grid, and canonical transform in metres.
-- Toggle catalog scan/model visuals, generated parametric geometry, collision proxies, local references, and measurements independently.
+- Review the built-in SH0 `.spz` capture; the aligned fullbright GLB is its browser fallback.
+- Edit the fixture table dimensions, hole grid, and canonical transform in metres. The generated parametric table starts hidden because the captured table is already present in the scan.
+- Toggle catalog scan visuals, generated parametric geometry, collision proxies, local references, and measurements independently.
 - Add local `.ply`, `.splat`, `.ksplat`, `.spz`, `.glb`, or `.obj` references. Spark is loaded only when a splat is requested.
 - Splats above 250,000 Gaussians receive a worker-built LOD and render against a 250,000-splat budget so the editor remains responsive while retaining the complete source file.
 - Use Select, Move, Rotate, Measure, orthographic views, Focus, undo, and redo directly in the viewport.
@@ -133,7 +133,7 @@ This is a convenience boundary for trusted local automation, not a hardened sand
 - Three.js receives a single canonical `Z-up -> Y-up` root transform. Simulator exporters consume the canonical Z-up data.
 - Scene schema version: `2` (`src/domain/types.ts` and `src/domain/schema.ts`).
 
-`assets/catalog.json` is the browser catalog. `assets/welding_cell/studio.asset.json` identifies both the aligned SPZ capture and fullbright GLB. The checked-in SPZ is legacy-gzip SPZ v3 with SH degree 0 for Spark compatibility and view-independent color.
+`assets/catalog.json` is the browser catalog. `assets/welding_cell/studio.asset.json` identifies the aligned SPZ capture and the fallback fullbright GLB. The checked-in SPZ is legacy-gzip SPZ v3 with SH degree 0 for Spark compatibility and view-independent color.
 
 Regenerate the browser inputs from the repository root:
 

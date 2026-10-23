@@ -107,7 +107,6 @@ interface PickResult {
 type SparkModule = typeof SparkTypes;
 type SparkRendererInstance = InstanceType<SparkModule["SparkRenderer"]>;
 const SPLAT_LOD_THRESHOLD = 250_000;
-const SPLAT_VIEWER_COLOR_GAIN = 0.5;
 
 
 
@@ -705,14 +704,7 @@ class ViewportEngine {
   private async loadCatalog(catalog: CatalogEntry, generation: number): Promise<void> {
     const contents: Object3D[] = [];
     const errors: string[] = [];
-
-    try {
-      const gltf = await this.gltfLoader.loadAsync(catalog.browser.glb);
-      makeObjectMaterialsUnlit(gltf.scene);
-      contents.push(gltf.scene);
-    } catch (error) {
-      errors.push(`GLB: ${errorMessage(error)}`);
-    }
+    let visualLoaded = false;
 
     if (catalog.browser.spz) {
       try {
@@ -727,11 +719,6 @@ class ViewportEngine {
           lodAbove: SPLAT_LOD_THRESHOLD,
           enableLod: true,
         });
-        splat.recolor.setRGB(
-          SPLAT_VIEWER_COLOR_GAIN,
-          SPLAT_VIEWER_COLOR_GAIN,
-          SPLAT_VIEWER_COLOR_GAIN,
-        );
         splat.userData.studioSplat = true;
         root.add(splat);
         await splat.initialized;
@@ -739,8 +726,19 @@ class ViewportEngine {
           await splat.createLodSplats();
         }
         contents.push(root);
+        visualLoaded = true;
       } catch (error) {
         errors.push(`SPZ: ${errorMessage(error)}`);
+      }
+    }
+
+    if (!visualLoaded) {
+      try {
+        const gltf = await this.gltfLoader.loadAsync(catalog.browser.glb);
+        makeObjectMaterialsUnlit(gltf.scene);
+        contents.push(gltf.scene);
+      } catch (error) {
+        errors.push(`GLB: ${errorMessage(error)}`);
       }
     }
 
@@ -870,11 +868,6 @@ class ViewportEngine {
           lodAbove: SPLAT_LOD_THRESHOLD,
           enableLod: true,
         });
-        splat.recolor.setRGB(
-          SPLAT_VIEWER_COLOR_GAIN,
-          SPLAT_VIEWER_COLOR_GAIN,
-          SPLAT_VIEWER_COLOR_GAIN,
-        );
         splat.userData.studioSplat = true;
         splat.opacity = Math.min(1, Math.max(0, pending.definition.opacity));
         content = splat;

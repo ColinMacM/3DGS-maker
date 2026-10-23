@@ -446,10 +446,26 @@ function migrateVersion1(value: unknown): unknown {
   };
 }
 
+function migrateCatalogComposition(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+  const document = value as Record<string, unknown>;
+  if (document.assetId !== "welding-cell" || document.assetVersion !== "1.1.0") {
+    return value;
+  }
+  const layers = document.layers;
+  return {
+    ...document,
+    assetVersion: "1.2.0",
+    layers: typeof layers === "object" && layers !== null && !Array.isArray(layers)
+      ? { ...layers as Record<string, unknown>, parametricModel: false }
+      : layers,
+  };
+}
+
 /** Validates v2 input, migrating persisted v1 lighting state to fullbright data. */
 export function validateStudioDocument(value: unknown): StudioDocument {
   const issues: ValidationIssue[] = [];
-  const record = requireRecord(migrateVersion1(value), "$", issues);
+  const record = requireRecord(migrateCatalogComposition(migrateVersion1(value)), "$", issues);
   rejectUnknownKeys(record, DOCUMENT_KEYS, "$", issues);
   if (record.schemaVersion !== 2) issues.push({ path: "$.schemaVersion", message: "must equal 2" });
   if (record.units !== "m") issues.push({ path: "$.units", message: 'must equal "m"' });

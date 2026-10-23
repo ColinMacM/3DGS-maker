@@ -4,7 +4,7 @@
     {
       "schemaVersion": 1,
       "id": "welding-cell",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "name": "Welding Cell",
       "description": "Metric Z-up welding workcell with the captured Gaussian scan, fixture table, clamps, sample, mount plate, floor, and walls. Environment only; no robot or articulation is included.",
       "units": "m",

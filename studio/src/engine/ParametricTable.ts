@@ -92,7 +92,7 @@ export function createParametricTable(parameters: TableParameters): Group {
   group.name = "Parametric welding table";
 
   const steel = new MeshBasicMaterial({ color: 0x5e6b72 });
-  const edges = new MeshBasicMaterial({ color: 0x263137 });
+  const edges = new MeshBasicMaterial({ color: 0x5e6b72 });
   const frame = new MeshBasicMaterial({ color: 0x222d33 });
   const feet = new MeshBasicMaterial({ color: 0x11181c });
 

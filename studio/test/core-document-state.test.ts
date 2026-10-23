@@ -74,13 +74,28 @@ describe("core studio document schema", () => {
     const migrated = validateStudioDocument(legacy);
 
     expect(migrated.schemaVersion).toBe(2);
-    expect(migrated.assetVersion).toBe("1.1.0");
+    expect(migrated.assetVersion).toBe("1.2.0");
     expect(migrated.viewport).toEqual({});
     expect(migrated.entities).toHaveLength(1);
     expect(migrated.entities[0]).toMatchObject({
       id: "fixture",
       material: { color: "#808080", opacity: 1 },
     });
+  });
+
+  it("migrates the welding-cell scan to a single default table representation", () => {
+    const current = createDefaultStudioDocument();
+    const previousCatalog = {
+      ...current,
+      assetVersion: "1.1.0",
+      layers: { ...current.layers, parametricModel: true },
+    };
+
+    const migrated = validateStudioDocument(previousCatalog);
+
+    expect(migrated.assetVersion).toBe("1.2.0");
+    expect(migrated.layers.catalogVisuals).toBe(true);
+    expect(migrated.layers.parametricModel).toBe(false);
   });
 
   it("reports deterministic field paths for invalid input", () => {
