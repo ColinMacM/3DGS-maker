@@ -1,7 +1,7 @@
-# Receiver output, including the Wi-Fi pairing key
+# AR Pose Capture receiver output (any folder), including the Wi-Fi pairing key
 captures/
 
-# Personal signing (team and bundle ID); see Signing.xcconfig
+# AR Pose Capture personal signing (team and bundle ID); see ar-pose-capture/Signing.xcconfig
 Local.xcconfig
 
 # Xcode per-user state and build output
