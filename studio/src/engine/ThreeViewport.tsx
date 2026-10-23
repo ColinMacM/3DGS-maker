@@ -6,15 +6,18 @@ import {
 } from "react";
 import type { CSSProperties } from "react";
 import {
+  AmbientLight,
   Box3,
   BoxGeometry,
   BoxHelper,
   BufferGeometry,
   CanvasTexture,
   Color,
+  DirectionalLight,
   DoubleSide,
   GridHelper,
   Group,
+  HemisphereLight,
   Line,
   LineBasicMaterial,
   LinearFilter,
@@ -67,7 +70,6 @@ import {
 } from "./dispose";
 import { createParametricTable } from "./ParametricTable";
 import { SceneEntityRenderer } from "./SceneEntities";
-import { makeObjectMaterialsUnlit } from "./unlit";
 
 export interface ThreeViewportHandle {
   focus(): void;
@@ -427,6 +429,29 @@ class ViewportEngine {
     grid.name = "Metric floor grid";
     this.scene.add(grid);
 
+    const ambient = new AmbientLight(0xffffff, 0.55);
+    ambient.name = "Viewer ambient fill";
+    this.scene.add(ambient);
+
+    const hemisphere = new HemisphereLight(0xdbe9ee, 0x53616a, 1);
+    hemisphere.name = "Viewer sky fill";
+    this.scene.add(hemisphere);
+
+    const key = new DirectionalLight(0xffffff, 1.8);
+    key.name = "Viewer positive-axis key";
+    key.position.set(4, 6, 4);
+    this.scene.add(key);
+
+    const fill = new DirectionalLight(0xddeeff, 1.2);
+    fill.name = "Viewer negative-X fill";
+    fill.position.set(-4, 3, 2);
+    this.scene.add(fill);
+
+    const rim = new DirectionalLight(0xfff0dc, 0.9);
+    rim.name = "Viewer negative-Z fill";
+    rim.position.set(0, 4, -5);
+    this.scene.add(rim);
+
 
     this.transformControls = new TransformControls(
       this.camera,
@@ -719,6 +744,7 @@ class ViewportEngine {
           lodAbove: SPLAT_LOD_THRESHOLD,
           enableLod: true,
         });
+        splat.rotation.x = Math.PI;
         splat.userData.studioSplat = true;
         root.add(splat);
         await splat.initialized;
@@ -735,7 +761,6 @@ class ViewportEngine {
     if (!visualLoaded) {
       try {
         const gltf = await this.gltfLoader.loadAsync(catalog.browser.glb);
-        makeObjectMaterialsUnlit(gltf.scene);
         contents.push(gltf.scene);
       } catch (error) {
         errors.push(`GLB: ${errorMessage(error)}`);
@@ -880,10 +905,8 @@ class ViewportEngine {
         const gltf = await this.referenceGltfLoader.loadAsync(definition.objectUrl);
         content = gltf.scene;
         content.rotation.x = Math.PI / 2;
-        makeObjectMaterialsUnlit(content);
       } else if (extension === ".obj") {
         content = await this.referenceObjLoader.loadAsync(definition.objectUrl);
-        makeObjectMaterialsUnlit(content);
       } else {
         throw new Error(
           "Unsupported reference format; use GLB, OBJ, PLY, SPLAT, KSPLAT, or SPZ",

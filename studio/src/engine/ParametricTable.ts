@@ -4,7 +4,7 @@ import {
   ExtrudeGeometry,
   Group,
   Mesh,
-  MeshBasicMaterial,
+  MeshStandardMaterial,
   Path,
   Shape,
 } from "three";
@@ -22,7 +22,7 @@ function addBox(
   group: Group,
   geometry: BoxGeometry,
   position: readonly [number, number, number],
-  material: MeshBasicMaterial,
+  material: MeshStandardMaterial,
 ): void {
   const mesh = new Mesh(geometry, material);
   mesh.position.set(...position);
@@ -31,8 +31,8 @@ function addBox(
 
 function makePerforatedTop(
   parameters: TableParameters,
-  topMaterial: MeshBasicMaterial,
-  edgeMaterial: MeshBasicMaterial,
+  topMaterial: MeshStandardMaterial,
+  edgeMaterial: MeshStandardMaterial,
 ): Mesh {
   const width = positive(parameters.width);
   const length = positive(parameters.length);
@@ -91,10 +91,26 @@ export function createParametricTable(parameters: TableParameters): Group {
   const group = new Group();
   group.name = "Parametric welding table";
 
-  const steel = new MeshBasicMaterial({ color: 0x5e6b72 });
-  const edges = new MeshBasicMaterial({ color: 0x5e6b72 });
-  const frame = new MeshBasicMaterial({ color: 0x222d33 });
-  const feet = new MeshBasicMaterial({ color: 0x11181c });
+  const steel = new MeshStandardMaterial({
+    color: 0x5e6b72,
+    metalness: 0.55,
+    roughness: 0.45,
+  });
+  const edges = new MeshStandardMaterial({
+    color: 0x5e6b72,
+    metalness: 0.5,
+    roughness: 0.5,
+  });
+  const frame = new MeshStandardMaterial({
+    color: 0x36434a,
+    metalness: 0.35,
+    roughness: 0.62,
+  });
+  const feet = new MeshStandardMaterial({
+    color: 0x222c31,
+    metalness: 0.15,
+    roughness: 0.75,
+  });
 
   group.add(makePerforatedTop(parameters, steel, edges));
 

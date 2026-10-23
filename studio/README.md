@@ -39,7 +39,7 @@ bun run serve
 - Export/import the semantic scene recipe through **File**. Binary references are intentionally not embedded in JSON and must be re-imported if their local IndexedDB entry is unavailable.
 - Open **Build** to regenerate Blender, OpenUSD, or MuJoCo artifacts with the loopback build service.
 
-The viewport has no scene lights. Gaussian colors are intrinsic; mesh, primitive, OpenUSD, and MuJoCo visuals use lighting-independent fullbright/emissive materials.
+The viewport leaves Gaussian colors intrinsic and lights mesh geometry with a soft ambient/hemisphere base plus directional fills from three axes. This keeps the table and robot readable without adding shadows. OpenUSD and MuJoCo visuals remain lighting-independent.
 
 ## Local scene-control API
 
@@ -87,7 +87,7 @@ curl -sS \
   http://127.0.0.1:4174/api/scene/commands
 ```
 
-Supported entity kinds are `box`, `sphere`, `cylinder`, `capsule`, `model`, `group`, and `label`. Materials contain only `color` and `opacity`; Studio renders them fullbright. A model `source` must be a same-origin absolute `.glb` path such as `/welding_cell/browser/model.glb`. `parentId` may target a `group`; removing a group also removes its descendants. Other command types mirror `src/state/commands.ts`: table parameter/transform updates, layer visibility, reference add/remove, measurement add/remove, and reset. Committed changes appear in an open viewport through the 500 ms scene synchronization without source edits, a build, or a page reload.
+Supported entity kinds are `box`, `sphere`, `cylinder`, `capsule`, `model`, `group`, and `label`. Materials contain `color` and `opacity`; Studio renders primitives with neutral physically based defaults under the viewer light rig. A model `source` must be a same-origin absolute `.glb` path such as `/welding_cell/browser/model.glb`. `parentId` may target a `group`; removing a group also removes its descendants. Other command types mirror `src/state/commands.ts`: table parameter/transform updates, layer visibility, reference add/remove, measurement add/remove, and reset. Committed changes appear in an open viewport through the 500 ms scene synchronization without source edits, a build, or a page reload.
 
 New and removed entities use a brief welding-spark poof plus a scale transition. The viewport disables both effects when the operating system requests reduced motion.
 

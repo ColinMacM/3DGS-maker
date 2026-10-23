@@ -11,7 +11,7 @@ import {
   Group,
   LinearFilter,
   Mesh,
-  MeshBasicMaterial,
+  MeshStandardMaterial,
   Points,
   PointsMaterial,
   SphereGeometry,
@@ -29,7 +29,6 @@ import type {
 } from "../domain/types";
 import { applyCanonicalTransform } from "./coordinates";
 import { disposeObject3D } from "./dispose";
-import { makeObjectMaterialsUnlit } from "./unlit";
 
 interface EntityRuntime {
   definition: SceneEntity;
@@ -67,15 +66,15 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
-function createMaterial(definition: SceneMaterial): MeshBasicMaterial {
-  const material = new MeshBasicMaterial({
+function createMaterial(definition: SceneMaterial): MeshStandardMaterial {
+  return new MeshStandardMaterial({
     color: definition.color,
+    metalness: 0.15,
+    roughness: 0.65,
     opacity: definition.opacity,
     transparent: definition.opacity < 1,
     depthWrite: definition.opacity >= 1,
   });
-  material.toneMapped = false;
-  return material;
 }
 
 function markMesh(mesh: Mesh): Mesh {
@@ -486,7 +485,6 @@ export class SceneEntityRenderer {
             disposeObject3D(gltf.scene);
             return;
           }
-          makeObjectMaterialsUnlit(gltf.scene);
           root.add(gltf.scene);
         }).catch((error: unknown) => {
           if (this.disposed || this.runtimes.get(definition.id) !== runtime) return;

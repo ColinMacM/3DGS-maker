@@ -205,7 +205,7 @@ captured table is shown by default; the generated parametric table starts hidden
 to avoid drawing a second table over the scan. Studio provides a metric, Z-up
 Three.js work surface for local scan/splat references, measurements, collision review, a revisioned local
 scene-control API, constrained Python scene scripts, and fixed-target
-Blender/OpenUSD/MuJoCo builds. Studio and generated assets contain no scene lights.
+Blender/OpenUSD/MuJoCo builds. Studio uses a balanced multi-axis viewer light rig; generated simulator assets contain no scene lights.
 
 See [`studio/README.md`](studio/README.md) for setup, API and Python examples,
 supported reference formats, coordinate conventions, and the loopback service
