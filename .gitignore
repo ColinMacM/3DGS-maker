@@ -11,3 +11,10 @@ build/
 
 .DS_Store
 __pycache__/
+
+# Workcell Studio
+studio/node_modules/
+studio/dist/
+studio/coverage/
+studio/.env.local
+.workcell-studio/

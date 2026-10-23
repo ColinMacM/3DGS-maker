@@ -1,0 +1,34 @@
+{
+  "name": "workcell-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.2",
+  "scripts": {
+    "dev": "bun node_modules/vite/bin/vite.js",
+    "dev:server": "bun run server.ts",
+    "build": "bun node_modules/typescript/lib/tsc.js --noEmit && bun node_modules/vite/bin/vite.js build",
+    "test": "bun node_modules/vitest/vitest.mjs run",
+    "serve": "bun run server.ts",
+    "scene:python": "python3 run_scene_script.py"
+  },
+  "dependencies": {
+    "@sparkjsdev/spark": "^2.4.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@fontsource/ibm-plex-mono": "latest",
+    "@fontsource/ibm-plex-sans": "latest",
+    "@types/bun": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/three": "latest",
+    "@vitejs/plugin-react": "latest",
+    "jsdom": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}

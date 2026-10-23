@@ -167,11 +167,17 @@ Every local or streamed capture contains:
 
 | File | Contents |
 | --- | --- |
-| `images/frame_XXXXX.jpg` | Full-quality portrait JPEGs |
+| `images/frame_XXXXX.jpg` | Full-quality portrait JPEGs with the camera's EXIF lens metadata |
 | `poses.txt` | Image filename and 16 row-major camera-to-world matrix entries |
 | `intrinsics.txt` | Image filename, fx, fy, cx, cy, width, height in pixels |
 | `reference.csv` | Camera label, x/y/z in metres, yaw/pitch/roll and omega/phi/kappa in degrees |
 | `quaternion.txt` | Image filename and unit quaternion qx/qy/qz/qw |
+
+Each JPEG embeds the EXIF that ARKit reports for that frame, typically focal length
+(mm and 35 mm equivalent), f-number, lens model and specification, exposure time,
+and ISO, plus Make `Apple` and the iPhone model identifier. The metadata is part of the JPEG bytes, so
+local saving, USB, and Wi-Fi all deliver it identically; the receiver stores the
+file unchanged. Metashape reads it when the photos are added.
 
 All poses and intrinsics describe the saved portrait image, not the landscape
 sensor buffer. World coordinates are Z-up, with positions relative to the chosen
@@ -189,6 +195,19 @@ values are not unique at their singularities and may jump while the camera
 orientation remains correct. Near-singular angle extraction preserves small
 tilts instead of rounding them to exactly 90 degrees. Quaternions q and -q
 represent the same rotation; exported quaternions use qw >= 0.
+
+## Workcell Studio
+
+`studio/` is a local browser editor for the reconstructed welding cell in
+`assets/welding_cell`. It provides a metric, Z-up Three.js work surface for the
+parametric fixture table, scan/splat references, measurements, collision review,
+a revisioned local scene-control API, constrained Python scene scripts, and
+fixed-target Blender/OpenUSD/MuJoCo builds.
+
+See [`studio/README.md`](studio/README.md) for setup, API and Python examples,
+supported reference formats, coordinate conventions, and the loopback service
+boundary. The environment assets do not include the robot, URDF, articulation,
+controllers, or hardware access.
 
 ## Verification
 

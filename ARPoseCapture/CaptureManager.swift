@@ -719,6 +719,7 @@ final class CaptureManager: NSObject, ObservableObject, ARSessionDelegate {
         let size = frame.camera.imageResolution
         let k = PoseMath.portraitIntrinsics(frame.camera.intrinsics,
                                            sensorWidth: Int(size.width), sensorHeight: Int(size.height))
+        let metadata = Self.jpegMetadata(exif: frame.exifData, width: k.width, height: k.height)
         let stem = String(format: "frame_%05d", pictureIndex)
         let label = stem + ".jpg"
         let pose = PoseMath.cameraPose(frame.camera.transform, origin: origin)
@@ -738,7 +739,8 @@ final class CaptureManager: NSObject, ObservableObject, ARSessionDelegate {
                 let source = CIImage(cvPixelBuffer: pixelBuffer)
                 let colorSpace = source.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
                 let options = [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 1.0]
-                guard let jpeg = ciContext.jpegRepresentation(of: source.oriented(.right),
+                let portrait = source.oriented(.right).settingProperties(metadata)
+                guard let jpeg = ciContext.jpegRepresentation(of: portrait,
                                                               colorSpace: colorSpace, options: options) else {
                     throw CaptureStream.StreamError(message: "Could not encode JPEG")
                 }
@@ -873,6 +875,31 @@ final class CaptureManager: NSObject, ObservableObject, ARSessionDelegate {
             try? capture.quaternion.close()
         }
     }
+
+    /// The camera's EXIF for this frame from ARKit (focal length, f-number, lens model, exposure, ISO, ...),
+    /// so every JPEG carries its lens metadata to whichever destination stores it. Dimensions and
+    /// orientation describe the portrait pixels actually written.
+    private static func jpegMetadata(exif: [String: Any], width: Int, height: Int) -> [String: Any] {
+        var exif = exif
+        exif[kCGImagePropertyExifPixelXDimension as String] = width
+        exif[kCGImagePropertyExifPixelYDimension as String] = height
+        return [
+            kCGImagePropertyExifDictionary as String: exif,
+            kCGImagePropertyTIFFDictionary as String: [
+                kCGImagePropertyTIFFMake as String: "Apple",
+                kCGImagePropertyTIFFModel as String: deviceModel,
+                kCGImagePropertyTIFFSoftware as String: "ARPoseCapture",
+            ],
+            kCGImagePropertyOrientation as String: 1,
+        ]
+    }
+
+    /// Hardware identifier, e.g. "iPhone16,1"; UIDevice only reports "iPhone".
+    private static let deviceModel: String = {
+        var info = utsname()
+        uname(&info)
+        return withUnsafeBytes(of: &info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+    }()
 
     /// Copies a biplanar camera image (ARKit's YCbCr 4:2:0), keeping its colour attachments.
     private static func copy(_ source: CVPixelBuffer) -> CVPixelBuffer? {

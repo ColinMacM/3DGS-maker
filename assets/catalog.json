@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    {
+      "schemaVersion": 1,
+      "id": "welding-cell",
+      "version": "1.0.0",
+      "name": "Welding Cell",
+      "description": "Metric Z-up welding workcell with a fixture table, clamps, sample, mount plate, floor, and walls. Environment only; no robot or articulation is included.",
+      "units": "m",
+      "upAxis": "Z",
+      "browser": {
+        "glb": "/welding_cell/browser/welding_cell.glb"
+      },
+      "manifest": "/welding_cell/manifest.json",
+      "source": {
+        "blend": "/welding_cell/welding_cell.blend"
+      },
+      "simulator": {
+        "openUsd": "/welding_cell/isaac/welding_cell.usdc",
+        "mujoco": "/welding_cell/mujoco/welding_cell.xml"
+      },
+      "capabilities": [
+        "browser-visual",
+        "collision-boxes",
+        "parametric-table",
+        "openusd",
+        "mujoco"
+      ]
+    }
+  ]
+}
