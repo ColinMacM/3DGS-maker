@@ -4,7 +4,7 @@ import {
   ExtrudeGeometry,
   Group,
   Mesh,
-  MeshStandardMaterial,
+  MeshBasicMaterial,
   Path,
   Shape,
 } from "three";
@@ -22,19 +22,17 @@ function addBox(
   group: Group,
   geometry: BoxGeometry,
   position: readonly [number, number, number],
-  material: MeshStandardMaterial,
+  material: MeshBasicMaterial,
 ): void {
   const mesh = new Mesh(geometry, material);
   mesh.position.set(...position);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
   group.add(mesh);
 }
 
 function makePerforatedTop(
   parameters: TableParameters,
-  topMaterial: MeshStandardMaterial,
-  edgeMaterial: MeshStandardMaterial,
+  topMaterial: MeshBasicMaterial,
+  edgeMaterial: MeshBasicMaterial,
 ): Mesh {
   const width = positive(parameters.width);
   const length = positive(parameters.length);
@@ -84,8 +82,6 @@ function makePerforatedTop(
 
   const mesh = new Mesh(geometry, [topMaterial, edgeMaterial]);
   mesh.position.z = parameters.topHeight - thickness;
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
   mesh.name = "Perforated table top";
   return mesh;
 }
@@ -95,26 +91,10 @@ export function createParametricTable(parameters: TableParameters): Group {
   const group = new Group();
   group.name = "Parametric welding table";
 
-  const steel = new MeshStandardMaterial({
-    color: 0x5e6b72,
-    metalness: 0.82,
-    roughness: 0.34,
-  });
-  const edges = new MeshStandardMaterial({
-    color: 0x263137,
-    metalness: 0.78,
-    roughness: 0.42,
-  });
-  const frame = new MeshStandardMaterial({
-    color: 0x222d33,
-    metalness: 0.72,
-    roughness: 0.48,
-  });
-  const feet = new MeshStandardMaterial({
-    color: 0x11181c,
-    metalness: 0.25,
-    roughness: 0.72,
-  });
+  const steel = new MeshBasicMaterial({ color: 0x5e6b72 });
+  const edges = new MeshBasicMaterial({ color: 0x263137 });
+  const frame = new MeshBasicMaterial({ color: 0x222d33 });
+  const feet = new MeshBasicMaterial({ color: 0x11181c });
 
   group.add(makePerforatedTop(parameters, steel, edges));
 
@@ -151,8 +131,6 @@ export function createParametricTable(parameters: TableParameters): Group {
       // CylinderGeometry is Y-axis aligned; orient it to canonical Z.
       foot.rotation.x = Math.PI / 2;
       foot.position.set(x, y, 0.006);
-      foot.castShadow = true;
-      foot.receiveShadow = true;
       group.add(foot);
     }
   }

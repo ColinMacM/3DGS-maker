@@ -33,8 +33,58 @@ describe("core studio document schema", () => {
     expect(parsed.upAxis).toBe("Z");
   });
 
+  it("migrates persisted v1 lighting state to the fullbright v2 contract", () => {
+    const current = createDefaultStudioDocument();
+    const legacy = {
+      ...current,
+      schemaVersion: 1,
+      assetVersion: "1.0.0",
+      viewport: {
+        overheadLight: {
+          enabled: true,
+          color: "#ffffff",
+          intensity: 4,
+          position: [0, 0, 4],
+          target: [0, 0, 0],
+        },
+      },
+      entities: [
+        {
+          id: "fixture",
+          name: "Fixture",
+          kind: "box",
+          visible: true,
+          transform: { position: [0, 0, 0], quaternionXyzw: [0, 0, 0, 1], scale: [1, 1, 1] },
+          size: [1, 1, 1],
+          material: { color: "#808080", metalness: 0.8, roughness: 0.2, opacity: 1 },
+        },
+        {
+          id: "old-light",
+          name: "Old light",
+          kind: "point-light",
+          visible: true,
+          transform: { position: [0, 0, 2], quaternionXyzw: [0, 0, 0, 1], scale: [1, 1, 1] },
+          color: "#ffffff",
+          intensity: 3,
+          distance: 0,
+        },
+      ],
+    };
+
+    const migrated = validateStudioDocument(legacy);
+
+    expect(migrated.schemaVersion).toBe(2);
+    expect(migrated.assetVersion).toBe("1.1.0");
+    expect(migrated.viewport).toEqual({});
+    expect(migrated.entities).toHaveLength(1);
+    expect(migrated.entities[0]).toMatchObject({
+      id: "fixture",
+      material: { color: "#808080", opacity: 1 },
+    });
+  });
+
   it("reports deterministic field paths for invalid input", () => {
-    const invalid = { ...createDefaultStudioDocument(), schemaVersion: 2, units: "mm" };
+    const invalid = { ...createDefaultStudioDocument(), schemaVersion: 3, units: "mm" };
 
     expect(() => validateStudioDocument(invalid)).toThrow(StudioDocumentValidationError);
     try {
@@ -42,7 +92,7 @@ describe("core studio document schema", () => {
     } catch (error) {
       const validation = error as StudioDocumentValidationError;
       expect(validation.issues).toEqual(expect.arrayContaining([
-        { path: "$.schemaVersion", message: "must equal 1" },
+        { path: "$.schemaVersion", message: "must equal 2" },
         { path: "$.units", message: 'must equal "m"' },
       ]));
     }

@@ -1,11 +1,11 @@
-"""Build a self-contained OpenUSD stage from the Blender-authored workcell assets."""
+"""Build a self-contained, fullbright OpenUSD stage from the splat-derived workcell assets."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 import re
 
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdLux, UsdPhysics, UsdShade
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdShade
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKCELL = ROOT / "assets" / "welding_cell"
@@ -27,14 +27,14 @@ def parse_obj(path: Path):
     return points, faces
 
 
-def material(stage, name, color, metallic, roughness):
+def material(stage, name, color):
     path = f"/World/Looks/{name}"
     result = UsdShade.Material.Define(stage, path)
     shader = UsdShade.Shader.Define(stage, path + "/PreviewSurface")
     shader.CreateIdAttr("UsdPreviewSurface")
-    shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(*color))
-    shader.CreateInput("metallic", Sdf.ValueTypeNames.Float).Set(metallic)
-    shader.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(roughness)
+    value = Gf.Vec3f(*color)
+    shader.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(Gf.Vec3f(0.0))
+    shader.CreateInput("emissiveColor", Sdf.ValueTypeNames.Color3f).Set(value)
     result.CreateSurfaceOutput().ConnectToSource(shader.ConnectableAPI(), "surface")
     return result
 
@@ -73,18 +73,18 @@ def build():
     UsdGeom.SetStageMetersPerUnit(stage, 1.0)
     world = UsdGeom.Xform.Define(stage, "/World")
     stage.SetDefaultPrim(world.GetPrim())
-    stage.SetMetadata("comment", "Metric welding cell exported from the Blender-authored assets")
+    stage.SetMetadata("comment", "Metric fullbright welding cell reconstructed against the captured Gaussian splat")
     UsdGeom.Xform.Define(stage, "/World/Looks")
     UsdGeom.Xform.Define(stage, "/World/Environment")
     UsdGeom.Xform.Define(stage, "/World/Environment/Visuals")
     UsdGeom.Xform.Define(stage, "/World/Environment/Colliders")
     looks = {
-        "table": material(stage, "DarkSteel", (0.18, 0.22, 0.25), 0.82, 0.24),
-        "fixture": material(stage, "FixtureSteel", (0.50, 0.52, 0.54), 0.90, 0.18),
-        "sample": material(stage, "WeldingSample", (0.62, 0.64, 0.65), 0.92, 0.20),
-        "aluminum": material(stage, "MountAluminum", (0.44, 0.47, 0.50), 0.86, 0.24),
-        "floor": material(stage, "Floor", (0.18, 0.19, 0.21), 0.05, 0.72),
-        "wall": material(stage, "Wall", (0.67, 0.69, 0.70), 0.05, 0.58),
+        "table": material(stage, "DarkSteel", (0.18, 0.22, 0.25)),
+        "fixture": material(stage, "FixtureSteel", (0.50, 0.52, 0.54)),
+        "sample": material(stage, "WeldingSample", (0.62, 0.64, 0.65)),
+        "aluminum": material(stage, "MountAluminum", (0.44, 0.47, 0.50)),
+        "floor": material(stage, "Floor", (0.18, 0.19, 0.21)),
+        "wall": material(stage, "Wall", (0.67, 0.69, 0.70)),
     }
     meshes = (
         ("welding_table_visual.obj", "WeldingTable", looks["table"]),
@@ -105,9 +105,6 @@ def build():
     physics = UsdPhysics.Scene.Define(stage, "/World/PhysicsScene")
     physics.CreateGravityDirectionAttr().Set(Gf.Vec3f(0, 0, -1))
     physics.CreateGravityMagnitudeAttr().Set(9.81)
-    light = UsdLux.DomeLight.Define(stage, "/World/StudioLight")
-    light.CreateIntensityAttr().Set(900.0)
-    light.CreateColorAttr().Set(Gf.Vec3f(0.92, 0.95, 1.0))
     stage.GetRootLayer().Save()
 
 
@@ -118,10 +115,11 @@ def validate():
     meshes = [prim for prim in prims if prim.IsA(UsdGeom.Mesh)]
     rigid_bodies = [prim for prim in prims if prim.HasAPI(UsdPhysics.RigidBodyAPI)]
     joints = [prim for prim in prims if prim.IsA(UsdPhysics.Joint)]
+    lights = [prim for prim in prims if str(prim.GetTypeName()).endswith("Light")]
     if not stage or not stage.GetDefaultPrim() or len(meshes) != 10 or len(colliders) != 41:
         raise RuntimeError("exported OpenUSD stage has incomplete workcell geometry")
-    if rigid_bodies or joints:
-        raise RuntimeError("asset-only OpenUSD stage unexpectedly contains a robot articulation")
+    if rigid_bodies or joints or lights:
+        raise RuntimeError("asset-only OpenUSD stage unexpectedly contains articulation or scene lights")
     return {
         "stage": str(OUTPUT),
         "bytes": OUTPUT.stat().st_size,
@@ -130,6 +128,7 @@ def validate():
         "colliders": len(colliders),
         "rigid_bodies": len(rigid_bodies),
         "joints": len(joints),
+        "lights": len(lights),
     }
 
 

@@ -665,6 +665,7 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".splat": "application/octet-stream",
+  ".spz": "application/octet-stream",
   ".usdc": "application/octet-stream",
   ".wasm": "application/wasm",
   ".webp": "image/webp",

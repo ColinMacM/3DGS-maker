@@ -81,26 +81,6 @@ def main() -> None:
             raise TypeError("visible must be a boolean")
         scene["layers"][name] = visible
 
-    def set_overhead_light(
-        *,
-        enabled: bool | None = None,
-        color: str | None = None,
-        intensity: float | None = None,
-        position: list[float] | tuple[float, float, float] | None = None,
-        target: list[float] | tuple[float, float, float] | None = None,
-    ) -> None:
-        light = scene["viewport"]["overheadLight"]
-        if enabled is not None:
-            light["enabled"] = enabled
-        if color is not None:
-            light["color"] = color
-        if intensity is not None:
-            light["intensity"] = intensity
-        if position is not None:
-            light["position"] = list(position)
-        if target is not None:
-            light["target"] = list(target)
-
 
     def add_measurement(
         start: list[float] | tuple[float, float, float],
@@ -138,18 +118,8 @@ def main() -> None:
             "scale": list(scale),
         }
 
-    def _material(
-        color: str,
-        metalness: float,
-        roughness: float,
-        opacity: float,
-    ) -> dict[str, Any]:
-        return {
-            "color": color,
-            "metalness": metalness,
-            "roughness": roughness,
-            "opacity": opacity,
-        }
+    def _material(color: str, opacity: float) -> dict[str, Any]:
+        return {"color": color, "opacity": opacity}
 
     def _base_entity(
         kind: str,
@@ -235,8 +205,6 @@ def main() -> None:
         quaternion_xyzw: list[float] | tuple[float, float, float, float] = (0, 0, 0, 1),
         scale: list[float] | tuple[float, float, float] = (1, 1, 1),
         color: str = "#b8c0c4",
-        metalness: float = 0,
-        roughness: float = 0.7,
         opacity: float = 1,
         entity_id: str | None = None,
         parent_id: str | None = None,
@@ -245,7 +213,7 @@ def main() -> None:
             "box", name, entity_id, parent_id, position, quaternion_xyzw, scale
         )
         entity["size"] = list(size)
-        entity["material"] = _material(color, metalness, roughness, opacity)
+        entity["material"] = _material(color, opacity)
         return upsert_entity(entity)
 
     def add_sphere(
@@ -254,8 +222,6 @@ def main() -> None:
         radius: float,
         position: list[float] | tuple[float, float, float] = (0, 0, 0),
         color: str = "#b8c0c4",
-        metalness: float = 0,
-        roughness: float = 0.7,
         opacity: float = 1,
         entity_id: str | None = None,
         parent_id: str | None = None,
@@ -264,7 +230,7 @@ def main() -> None:
             "sphere", name, entity_id, parent_id, position, (0, 0, 0, 1), (1, 1, 1)
         )
         entity["radius"] = radius
-        entity["material"] = _material(color, metalness, roughness, opacity)
+        entity["material"] = _material(color, opacity)
         return upsert_entity(entity)
 
     def _add_round_primitive(
@@ -275,8 +241,6 @@ def main() -> None:
         position: list[float] | tuple[float, float, float],
         quaternion_xyzw: list[float] | tuple[float, float, float, float],
         color: str,
-        metalness: float,
-        roughness: float,
         opacity: float,
         entity_id: str | None,
         parent_id: str | None,
@@ -286,7 +250,7 @@ def main() -> None:
         )
         entity["radius"] = radius
         entity["height"] = height
-        entity["material"] = _material(color, metalness, roughness, opacity)
+        entity["material"] = _material(color, opacity)
         return upsert_entity(entity)
 
     def add_cylinder(
@@ -297,15 +261,13 @@ def main() -> None:
         position: list[float] | tuple[float, float, float] = (0, 0, 0),
         quaternion_xyzw: list[float] | tuple[float, float, float, float] = (0, 0, 0, 1),
         color: str = "#b8c0c4",
-        metalness: float = 0,
-        roughness: float = 0.7,
         opacity: float = 1,
         entity_id: str | None = None,
         parent_id: str | None = None,
     ) -> str:
         return _add_round_primitive(
             "cylinder", name, radius, height, position, quaternion_xyzw,
-            color, metalness, roughness, opacity, entity_id, parent_id
+            color, opacity, entity_id, parent_id
         )
 
     def add_capsule(
@@ -316,15 +278,13 @@ def main() -> None:
         position: list[float] | tuple[float, float, float] = (0, 0, 0),
         quaternion_xyzw: list[float] | tuple[float, float, float, float] = (0, 0, 0, 1),
         color: str = "#b8c0c4",
-        metalness: float = 0,
-        roughness: float = 0.7,
         opacity: float = 1,
         entity_id: str | None = None,
         parent_id: str | None = None,
     ) -> str:
         return _add_round_primitive(
             "capsule", name, radius, height, position, quaternion_xyzw,
-            color, metalness, roughness, opacity, entity_id, parent_id
+            color, opacity, entity_id, parent_id
         )
 
     def add_model(
@@ -378,36 +338,6 @@ def main() -> None:
         })
         return upsert_entity(entity)
 
-    def add_directional_light(
-        name: str,
-        *,
-        position: list[float] | tuple[float, float, float],
-        target: list[float] | tuple[float, float, float] = (0, 0, 0),
-        color: str = "#ffffff",
-        intensity: float = 1,
-        entity_id: str | None = None,
-    ) -> str:
-        entity = _base_entity(
-            "directional-light", name, entity_id, None, position, (0, 0, 0, 1), (1, 1, 1)
-        )
-        entity.update({"target": list(target), "color": color, "intensity": intensity})
-        return upsert_entity(entity)
-
-    def add_point_light(
-        name: str,
-        *,
-        position: list[float] | tuple[float, float, float],
-        color: str = "#ffffff",
-        intensity: float = 1,
-        distance: float = 0,
-        entity_id: str | None = None,
-        parent_id: str | None = None,
-    ) -> str:
-        entity = _base_entity(
-            "point-light", name, entity_id, parent_id, position, (0, 0, 0, 1), (1, 1, 1)
-        )
-        entity.update({"color": color, "intensity": intensity, "distance": distance})
-        return upsert_entity(entity)
 
     safe_builtins = {
         "abs": abs,
@@ -444,7 +374,6 @@ def main() -> None:
         "set_layer": set_layer,
         "add_measurement": add_measurement,
         "remove_measurement": remove_measurement,
-        "set_overhead_light": set_overhead_light,
         "upsert_entity": upsert_entity,
         "remove_entity": remove_entity,
         "move_entity": move_entity,
@@ -456,8 +385,6 @@ def main() -> None:
         "add_model": add_model,
         "add_group": add_group,
         "add_label": add_label,
-        "add_directional_light": add_directional_light,
-        "add_point_light": add_point_light,
     }
     output = io.StringIO()
     with contextlib.redirect_stdout(output):

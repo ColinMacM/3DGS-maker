@@ -199,10 +199,12 @@ represent the same rotation; exported quaternions use qw >= 0.
 ## Workcell Studio
 
 `studio/` is a local browser editor for the reconstructed welding cell in
-`assets/welding_cell`. It provides a metric, Z-up Three.js work surface for the
-parametric fixture table, scan/splat references, measurements, collision review,
-a revisioned local scene-control API, constrained Python scene scripts, and
-fixed-target Blender/OpenUSD/MuJoCo builds.
+`assets/welding_cell`. Its catalog loads the captured workcell as a compressed,
+view-independent SPZ beside the aligned fullbright semantic model. It provides a
+metric, Z-up Three.js work surface for the parametric fixture table, local
+scan/splat references, measurements, collision review, a revisioned local
+scene-control API, constrained Python scene scripts, and fixed-target
+Blender/OpenUSD/MuJoCo builds. Studio and generated assets contain no scene lights.
 
 See [`studio/README.md`](studio/README.md) for setup, API and Python examples,
 supported reference formats, coordinate conventions, and the loopback service

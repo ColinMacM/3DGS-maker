@@ -28,22 +28,10 @@ export interface LayerVisibility {
   measurements: boolean;
 }
 
-export interface OverheadLightSettings {
-  enabled: boolean;
-  color: string;
-  intensity: number;
-  position: Vec3;
-  target: Vec3;
-}
-
-export interface ViewportSettings {
-  overheadLight: OverheadLightSettings;
-}
+export type ViewportSettings = Record<string, never>;
 
 export interface SceneMaterial {
   color: string;
-  metalness: number;
-  roughness: number;
   opacity: number;
 }
 
@@ -53,8 +41,6 @@ export type SceneEntityKind =
   | "cylinder"
   | "capsule"
   | "model"
-  | "directional-light"
-  | "point-light"
   | "group"
   | "label";
 
@@ -98,19 +84,6 @@ export interface ModelSceneEntity extends SceneEntityBase {
   source: string;
 }
 
-export interface DirectionalLightSceneEntity extends SceneEntityBase {
-  kind: "directional-light";
-  color: string;
-  intensity: number;
-  target: Vec3;
-}
-
-export interface PointLightSceneEntity extends SceneEntityBase {
-  kind: "point-light";
-  color: string;
-  intensity: number;
-  distance: number;
-}
 
 export interface GroupSceneEntity extends SceneEntityBase {
   kind: "group";
@@ -130,8 +103,6 @@ export type SceneEntity =
   | CylinderSceneEntity
   | CapsuleSceneEntity
   | ModelSceneEntity
-  | DirectionalLightSceneEntity
-  | PointLightSceneEntity
   | GroupSceneEntity
   | LabelSceneEntity;
 
@@ -155,7 +126,7 @@ export interface ReferenceLayer {
 }
 
 export interface StudioDocument {
-  schemaVersion: 1;
+  schemaVersion: 2;
   id: string;
   name: string;
   units: "m";
@@ -188,7 +159,13 @@ export interface CatalogEntry {
   thumbnail?: string;
   units: "m";
   upAxis: "Z";
-  browser: { glb: string };
+  browser: {
+    glb: string;
+    spz?: {
+      url: string;
+      transform: Transform;
+    };
+  };
   manifest: string;
   source: { blend: string };
   simulator: { openUsd: string; mujoco: string };

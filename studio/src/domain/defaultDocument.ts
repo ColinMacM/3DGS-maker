@@ -1,4 +1,4 @@
-import type { StudioDocument, Transform, ViewportSettings } from "./types";
+import type { StudioDocument, Transform } from "./types";
 
 const IDENTITY_TRANSFORM: Transform = {
   position: [0, 0, 0],
@@ -6,29 +6,17 @@ const IDENTITY_TRANSFORM: Transform = {
   scale: [1, 1, 1],
 };
 
-/** Creates fresh agent-controlled settings for the live Three.js viewport. */
-export function createDefaultViewportSettings(): ViewportSettings {
-  return {
-    overheadLight: {
-      enabled: true,
-      color: "#fff2d2",
-      intensity: 4.4,
-      position: [0, 0, 6],
-      target: [0, 0, 0.58],
-    },
-  };
-}
 
 /** Creates a fresh metric, Z-up document for the welding-cell catalog asset. */
 export function createDefaultStudioDocument(now = new Date()): StudioDocument {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: "welding-cell-scene",
     name: "Welding cell",
     units: "m",
     upAxis: "Z",
     assetId: "welding-cell",
-    assetVersion: "1.0.0",
+    assetVersion: "1.1.0",
     table: {
       width: 0.762,
       length: 1.3716,
@@ -53,7 +41,7 @@ export function createDefaultStudioDocument(now = new Date()): StudioDocument {
       reference: true,
       measurements: true,
     },
-    viewport: createDefaultViewportSettings(),
+    viewport: {},
     entities: [],
     references: [],
     measurements: [],

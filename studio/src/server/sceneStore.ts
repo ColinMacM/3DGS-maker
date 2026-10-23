@@ -14,7 +14,6 @@ const COMMAND_TYPES: Readonly<Record<StudioCommand["type"], true>> = {
   "table.parameters.update": true,
   "table.transform.update": true,
   "layer.visibility.set": true,
-  "viewport.settings.update": true,
   "entity.upsert": true,
   "entity.remove": true,
   "reference.add": true,

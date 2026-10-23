@@ -66,6 +66,10 @@ describe("reference import validation", () => {
       kind: "splat",
       maximumBytes: MAX_SPLAT_REFERENCE_BYTES,
     });
+    expect(validateReferenceImport({ name: "scan.spz", size: MAX_SPLAT_REFERENCE_BYTES })).toEqual({
+      kind: "splat",
+      maximumBytes: MAX_SPLAT_REFERENCE_BYTES,
+    });
   });
 
   it("rejects glTF sidecar documents and oversized references before persistence", () => {

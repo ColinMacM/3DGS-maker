@@ -1,6 +1,6 @@
 # Workcell Studio
 
-Local-first browser editor for the metric, Z-up welding-cell environment in `assets/welding_cell`. The browser is the authoring and review surface; Blender remains the canonical high-fidelity source, and the build service produces simulator assets. The scene intentionally excludes the robot, URDF, articulation, controllers, and hardware access.
+Local-first browser editor for the metric, Z-up welding-cell environment in `assets/welding_cell`. The catalog loads the captured workcell as compressed SPZ alongside the aligned semantic GLB; Blender remains the canonical source for derived meshes and collision proxies. The scene intentionally excludes the robot, URDF, articulation, controllers, and hardware access.
 
 ## Run locally
 
@@ -29,13 +29,17 @@ bun run serve
 
 ## Workflow
 
+- Review the built-in SH0 `.spz` capture together with the aligned fullbright GLB.
 - Edit the fixture table dimensions, hole grid, and canonical transform in metres.
-- Toggle catalog visuals, generated parametric geometry, collision proxies, local references, and measurements independently.
+- Toggle catalog scan/model visuals, generated parametric geometry, collision proxies, local references, and measurements independently.
 - Add local `.ply`, `.splat`, `.ksplat`, `.spz`, `.glb`, or `.obj` references. Spark is loaded only when a splat is requested.
+- Splats above 250,000 Gaussians receive a worker-built LOD and render against a 250,000-splat budget so the editor remains responsive while retaining the complete source file.
 - Use Select, Move, Rotate, Measure, orthographic views, Focus, undo, and redo directly in the viewport.
 - Scene state is saved locally. Reference bytes are stored in IndexedDB; transient blob URLs are never written into scene JSON.
 - Export/import the semantic scene recipe through **File**. Binary references are intentionally not embedded in JSON and must be re-imported if their local IndexedDB entry is unavailable.
 - Open **Build** to regenerate Blender, OpenUSD, or MuJoCo artifacts with the loopback build service.
+
+The viewport has no scene lights. Gaussian colors are intrinsic; mesh, primitive, OpenUSD, and MuJoCo visuals use lighting-independent fullbright/emissive materials.
 
 ## Local scene-control API
 
@@ -75,8 +79,6 @@ curl -sS \
         "size": [0.12, 0.04, 0.08],
         "material": {
           "color": "#d88a32",
-          "metalness": 0.65,
-          "roughness": 0.3,
           "opacity": 1
         }
       }
@@ -85,7 +87,7 @@ curl -sS \
   http://127.0.0.1:4174/api/scene/commands
 ```
 
-Supported entity kinds are `box`, `sphere`, `cylinder`, `capsule`, `model`, `directional-light`, `point-light`, `group`, and `label`. A model `source` must be a same-origin absolute `.glb` path such as `/welding_cell/browser/model.glb`. `parentId` may target a `group`; removing a group also removes its descendants. Other command types mirror `src/state/commands.ts`: table parameter/transform updates, layer visibility, viewport settings, reference add/remove, measurement add/remove, and reset. Committed changes appear in an open viewport through the 500 ms scene synchronization without source edits, a build, or a page reload.
+Supported entity kinds are `box`, `sphere`, `cylinder`, `capsule`, `model`, `group`, and `label`. Materials contain only `color` and `opacity`; Studio renders them fullbright. A model `source` must be a same-origin absolute `.glb` path such as `/welding_cell/browser/model.glb`. `parentId` may target a `group`; removing a group also removes its descendants. Other command types mirror `src/state/commands.ts`: table parameter/transform updates, layer visibility, reference add/remove, measurement add/remove, and reset. Committed changes appear in an open viewport through the 500 ms scene synchronization without source edits, a build, or a page reload.
 
 New and removed entities use a brief welding-spark poof plus a scale transition. The viewport disables both effects when the operating system requests reduced motion.
 
@@ -100,14 +102,12 @@ fixture_id = add_box(
     size=[0.12, 0.04, 0.08],
     position=[0.18, 0.08, 0.72],
     color="#d88a32",
-    metalness=0.65,
-    roughness=0.3,
 )
 move_entity(fixture_id, position=[0.22, 0.08, 0.72])
 print(f"updated {fixture_id}")
 ```
 
-`upsert_entity()` accepts the complete entity dictionary for capabilities not covered by a convenience helper. The convenience helpers are `add_box`, `add_sphere`, `add_cylinder`, `add_capsule`, `add_model`, `add_group`, `add_label`, `add_directional_light`, and `add_point_light`. Use `move_entity`, `set_entity_visible`, and `remove_entity` for lifecycle changes. Existing helpers remain available for the table, layers, overhead light, and measurements.
+`upsert_entity()` accepts the complete entity dictionary for capabilities not covered by a convenience helper. The convenience helpers are `add_box`, `add_sphere`, `add_cylinder`, `add_capsule`, `add_model`, `add_group`, and `add_label`. Use `move_entity`, `set_entity_visible`, and `remove_entity` for lifecycle changes. Existing helpers remain available for the table, layers, and measurements.
 
 Run a file or pipe a script:
 
@@ -131,17 +131,26 @@ This is a convenience boundary for trusted local automation, not a hardened sand
 - Quaternions in scene JSON: `[x, y, z, w]`.
 - Collision quaternions imported from `manifest.json`: `[w, x, y, z]` and converted at the rendering boundary.
 - Three.js receives a single canonical `Z-up -> Y-up` root transform. Simulator exporters consume the canonical Z-up data.
-- Scene schema version: `1` (`src/domain/types.ts` and `src/domain/schema.ts`).
+- Scene schema version: `2` (`src/domain/types.ts` and `src/domain/schema.ts`).
 
-`assets/catalog.json` is the browser catalog. `assets/welding_cell/studio.asset.json` supplies the GLB and collision manifest URLs. Regenerate the browser GLB from the canonical Blender source with:
+`assets/catalog.json` is the browser catalog. `assets/welding_cell/studio.asset.json` identifies both the aligned SPZ capture and fullbright GLB. The checked-in SPZ is legacy-gzip SPZ v3 with SH degree 0 for Spark compatibility and view-independent color.
+
+Regenerate the browser inputs from the repository root:
 
 ```bash
-/home/colin/Downloads/blender-5.2.2-linux-x64/blender \
-  --background assets/welding_cell/welding_cell.blend \
+LichtFeld-Studio convert SOURCE_GAUSSIANS.ply \
+  assets/welding_cell/source/welding_cell.spz \
+  --sh-degree 0 --spz-version 3 --no-provenance -y
+
+blender --background RECONSTRUCTION_SOURCE.blend \
+  --python assets/welding_cell/export_from_blender.py
+blender --background --factory-startup \
+  --python assets/welding_cell/build_blender_asset.py
+blender --background assets/welding_cell/welding_cell.blend \
   --python assets/welding_cell/export_browser.py
 ```
 
-The exporter preserves canonical Z-up coordinates; the viewport performs the display-axis conversion.
+`export_from_blender.py` records the PLY/SPZ-to-canonical transform in `manifest.json`. Keep the same transform in `catalog.json` and `studio.asset.json` whenever the authored table alignment changes. The viewport applies that transform before its single canonical `Z-up -> Y-up` display conversion.
 
 ## Build service boundary
 

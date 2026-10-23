@@ -24,7 +24,7 @@ interface WorkspaceDockProps {
 }
 
 const layerLabels: Record<keyof LayerVisibility, string> = {
-  catalogVisuals: "Catalog visuals",
+  catalogVisuals: "Catalog scan + model",
   parametricModel: "Parametric table",
   collisions: "Collision proxies",
   reference: "Local references",
@@ -97,7 +97,7 @@ export function WorkspaceDock(props: WorkspaceDockProps) {
 
           <div className="scene-group">
             <div className="scene-group__heading"><h3>References</h3><button type="button" onClick={props.onAddReference}>Add</button></div>
-            {props.references.length === 0 ? <p className="small-empty">No scan or mesh reference. Add a local PLY, splat, GLB, or OBJ file.</p> : (
+            {props.references.length === 0 ? <p className="small-empty">No scan or mesh reference. Add a local PLY, SPLAT, KSPLAT, SPZ, GLB, or OBJ file.</p> : (
               <ul className="object-list">
                 {props.references.map((reference) => {
                   const availability = getReferenceAvailability(reference);

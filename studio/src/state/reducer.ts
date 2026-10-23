@@ -50,18 +50,6 @@ export function reduceStudioDocument(
         updatedAt,
       };
       break;
-    case "viewport.settings.update":
-      next = {
-        ...document,
-        viewport: {
-          overheadLight: {
-            ...document.viewport.overheadLight,
-            ...command.patch.overheadLight,
-          },
-        },
-        updatedAt,
-      };
-      break;
     case "entity.upsert": {
       const index = document.entities.findIndex(({ id }) => id === command.entity.id);
       const entities = index < 0

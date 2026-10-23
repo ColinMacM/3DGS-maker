@@ -1,4 +1,4 @@
-"""Build and smoke-test a MuJoCo scene containing only Blender-authored assets."""
+"""Build and smoke-test a fullbright MuJoCo scene containing only splat-derived assets."""
 from __future__ import annotations
 
 import json
@@ -30,12 +30,6 @@ def values(items):
     return " ".join(f"{float(value):.9g}" for value in items)
 
 
-def visible_rgba(name):
-    if name == "floor":
-        return "0.18 0.19 0.21 1"
-    if name.startswith("wall"):
-        return "0.67 0.69 0.70 1"
-    return "0 0 0 0"
 
 
 def build():
@@ -43,23 +37,35 @@ def build():
     root = ET.Element("mujoco", {"model": "welding_cell_environment"})
     ET.SubElement(root, "compiler", {"angle": "radian", "meshdir": "../meshes"})
     ET.SubElement(root, "option", {"timestep": "0.001", "integrator": "implicitfast"})
+    visual = ET.SubElement(root, "visual")
+    ET.SubElement(visual, "headlight", {
+        "ambient": "0 0 0",
+        "diffuse": "0 0 0",
+        "specular": "0 0 0",
+    })
     asset = ET.SubElement(root, "asset")
-    for name, filename, _ in VISUAL_MESHES:
+    for name, filename, rgba in VISUAL_MESHES:
         ET.SubElement(asset, "mesh", {"name": name, "file": filename})
+        ET.SubElement(asset, "material", {
+            "name": f"{name}_fullbright",
+            "rgba": rgba,
+            "emission": "1",
+            "specular": "0",
+            "shininess": "0",
+        })
     world = ET.SubElement(root, "worldbody")
     ET.SubElement(world, "camera", {"name": "overview", "pos": "2.3 -2.6 2.0", "xyaxes": "0.75 0.66 0 -0.30 0.34 0.89"})
-    ET.SubElement(world, "light", {"pos": "0 0 3", "dir": "0 0 -1", "diffuse": "0.85 0.85 0.85"})
-    ET.SubElement(world, "light", {"pos": "-1.5 -1 1.8", "dir": "0.6 0.5 -0.8", "diffuse": "0.45 0.48 0.52"})
-    for name, _, rgba in VISUAL_MESHES:
+    for name, _, _ in VISUAL_MESHES:
         ET.SubElement(world, "geom", {
             "name": f"visual_{name}", "type": "mesh", "mesh": name,
-            "contype": "0", "conaffinity": "0", "group": "2", "rgba": rgba,
+            "material": f"{name}_fullbright",
+            "contype": "0", "conaffinity": "0", "group": "2",
         })
     for box in manifest["collision_boxes"]:
         ET.SubElement(world, "geom", {
             "name": box["name"], "type": "box", "pos": values(box["pos"]),
             "quat": values(box["quat"]), "size": values(value / 2 for value in box["size"]),
-            "friction": "0.8 0.01 0.001", "group": "3", "rgba": visible_rgba(box["name"]),
+            "friction": "0.8 0.01 0.001", "group": "3", "rgba": "0 0 0 0",
         })
     ET.indent(root, space="  ")
     temporary_output = OUTPUT.with_name(f".{OUTPUT.stem}.tmp{OUTPUT.suffix}")
@@ -75,6 +81,8 @@ def smoke(model_path):
         mujoco.mj_step(model, data)
     if model.nq or model.nv or model.nu:
         raise RuntimeError("asset-only workcell unexpectedly contains robot state or actuators")
+    if model.nlight:
+        raise RuntimeError("fullbright workcell unexpectedly contains scene lights")
     return {
         "model": str(OUTPUT),
         "nq": model.nq,
@@ -83,6 +91,7 @@ def smoke(model_path):
         "nbody": model.nbody,
         "ngeom": model.ngeom,
         "nmesh": model.nmesh,
+        "nlight": model.nlight,
         "simulation_time_s": data.time,
         "finite_time": math.isfinite(data.time),
     }

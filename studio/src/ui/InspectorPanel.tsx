@@ -14,7 +14,7 @@ interface InspectorPanelProps {
 }
 
 const layerRows: Array<[keyof LayerVisibility, string, string]> = [
-  ["catalogVisuals", "Catalog visuals", "Browser GLB"],
+  ["catalogVisuals", "Catalog scan + model", "SPZ scan and fullbright GLB"],
   ["parametricModel", "Parametric model", "Editable table"],
   ["collisions", "Collision proxies", "Simulator geometry"],
   ["reference", "References", "Local files"],

@@ -1,11 +1,12 @@
 # Welding cell assets
 
-Metric, Z-up assets reconstructed in Blender from the captured workcell. This package contains only the Blender-authored environment; it does **not** contain the FR10 robot, URDF, articulation, or controllers.
+Metric, Z-up assets reconstructed against the captured workcell Gaussian splat. This package contains only the environment; it does **not** contain the FR10 robot, URDF, articulation, or controllers.
 
 ## Entry points
 
 | Use | File |
 |---|---|
+| Captured Gaussian source | `source/welding_cell.spz` |
 | Blender source | `welding_cell.blend` |
 | Isaac Sim / OpenUSD | `isaac/welding_cell.usdc` |
 | MuJoCo | `mujoco/welding_cell.xml` |
@@ -15,6 +16,8 @@ Metric, Z-up assets reconstructed in Blender from the captured workcell. This pa
 | Browser catalog metadata | `studio.asset.json` |
 
 The exported frame places the floor at `z = 0` and the table top at `z = 0.6477 m`. `+X` crosses the 30-inch table width; `+Y` follows the 54-inch table length.
+
+The SPZ is the 1,338,528-Gaussian refined capture, compressed as legacy-gzip SPZ v3 at SH degree 0. Its transform into the canonical workcell frame is recorded in `manifest.json`, `studio.asset.json`, and the root catalog. The OBJ/GLB/Blender/simulator geometry is the semantic approximation aligned to that capture; the SPZ itself is visual reference data, not collision geometry.
 
 Table dimensions:
 
@@ -28,12 +31,23 @@ The detailed OBJ meshes are visual-only. Physics uses 41 lightweight oriented bo
 
 The table holes are represented visually, not as through-hole collision geometry. Add explicit hole fixtures only if a task requires pin insertion or contact inside a hole.
 
+All distributed visuals are fullbright: the SPZ uses view-independent SH0 color, Blender and GLB materials are emissive/unlit, OpenUSD materials set `emissiveColor`, and MuJoCo materials use emission with the headlight disabled. The generated files contain no scene lights.
+
 ## Regeneration
 
 From the `3DGS-maker` root:
 
 ```bash
-# Rebuild the clean Blender asset from the checked-in OBJ meshes and manifest.
+# Recompress the refined Gaussian source for Spark-compatible browser input.
+LichtFeld-Studio convert SOURCE_GAUSSIANS.ply \
+  assets/welding_cell/source/welding_cell.spz \
+  --sh-degree 0 --spz-version 3 --no-provenance -y
+
+# Re-export semantic meshes and collision proxies from the reconstruction aligned to the splat.
+blender --background RECONSTRUCTION_SOURCE.blend \
+  --python assets/welding_cell/export_from_blender.py
+
+# Rebuild the clean, fullbright Blender asset from those meshes and the manifest.
 blender --background --factory-startup \
   --python assets/welding_cell/build_blender_asset.py
 
@@ -41,14 +55,14 @@ blender --background --factory-startup \
 blender --background assets/welding_cell/welding_cell.blend \
   --python assets/welding_cell/export_browser.py
 
-# OpenUSD export and structural validation.
+# Fullbright OpenUSD export and structural validation.
 uv run --with usd-core --no-project \
   python assets/welding_cell/export_isaac.py
 
-# MuJoCo export and a 10-step compile/simulation smoke test.
+# Fullbright MuJoCo export and a 10-step compile/simulation smoke test.
 python assets/welding_cell/export_mujoco.py
 ```
 
-To refresh the OBJ meshes from the reconstruction source, open that source `.blend` in Blender and run `assets/welding_cell/export_from_blender.py`.
+`export_from_blender.py` writes `source_spz_transform` into the manifest. If the authored table alignment changes, copy that transform into `assets/catalog.json` and `studio.asset.json` before rebuilding the browser bundle.
 
 `export_mujoco.py` requires the `mujoco` Python package. Both simulator files are standalone environment assets intended to be composed with a robot separately.

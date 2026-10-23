@@ -1,13 +1,21 @@
 {
   "schemaVersion": 1,
   "id": "welding-cell",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Welding Cell",
-  "description": "Metric Z-up welding workcell with a fixture table, clamps, sample, mount plate, floor, and walls. Environment only; no robot or articulation is included.",
+  "description": "Metric Z-up welding workcell with the captured Gaussian scan, fixture table, clamps, sample, mount plate, floor, and walls. Environment only; no robot or articulation is included.",
   "units": "m",
   "upAxis": "Z",
   "browser": {
-    "glb": "/welding_cell/browser/welding_cell.glb"
+    "glb": "/welding_cell/browser/welding_cell.glb",
+    "spz": {
+      "url": "/welding_cell/source/welding_cell.spz",
+      "transform": {
+        "position": [0.0386948958, 0.5096305013, 1.0181703568],
+        "quaternionXyzw": [0.0103495978, 0.0535344072, 0.0005548852, 0.9985122085],
+        "scale": [1, 1, 1]
+      }
+    }
   },
   "manifest": "/welding_cell/manifest.json",
   "source": {
@@ -19,6 +27,7 @@
   },
   "capabilities": [
     "browser-visual",
+    "gaussian-splat",
     "collision-boxes",
     "parametric-table",
     "openusd",

@@ -1,4 +1,4 @@
-"""Export the clean welding-cell visual assembly as a browser-ready GLB.
+"""Export the clean, fullbright welding-cell visual assembly as a browser-ready GLB.
 
 Run from the repository root:
 
@@ -6,8 +6,8 @@ Run from the repository root:
       --python assets/welding_cell/export_browser.py
 
 The exporter opens the checked-in clean asset itself. It deliberately selects only
-the ten visual meshes, so collision proxies, the authoring camera, and the light
-never enter the browser artifact.
+the ten emissive visual meshes, so collision proxies and the authoring camera never
+enter the browser artifact.
 """
 from __future__ import annotations
 

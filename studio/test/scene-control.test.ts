@@ -26,8 +26,6 @@ const FIXTURE_BOX = {
   size: [0.12, 0.04, 0.08] as [number, number, number],
   material: {
     color: "#d88a32",
-    metalness: 0.65,
-    roughness: 0.3,
     opacity: 1,
   },
 };
@@ -46,12 +44,6 @@ describe("revisioned scene control", () => {
     const snapshot = await store.applyCommands(0, [
       { type: "table.parameters.update", patch: { width: 0.8 } },
       { type: "layer.visibility.set", layer: "collisions", visible: true },
-      {
-        type: "viewport.settings.update",
-        patch: {
-          overheadLight: { intensity: 6 },
-        },
-      },
       { type: "entity.upsert", entity: FIXTURE_BOX },
     ]);
 
@@ -59,7 +51,6 @@ describe("revisioned scene control", () => {
     expect(snapshot.persisted).toBe(true);
     expect(snapshot.document.table.width).toBe(0.8);
     expect(snapshot.document.layers.collisions).toBe(true);
-    expect(snapshot.document.viewport.overheadLight.intensity).toBe(6);
     expect(snapshot.document.entities).toEqual([FIXTURE_BOX]);
     expect(snapshot.document.updatedAt).toBe("2026-01-01T00:00:01.000Z");
     expect(persisted).toEqual([0.8]);

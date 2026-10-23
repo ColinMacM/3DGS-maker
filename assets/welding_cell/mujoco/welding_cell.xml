@@ -1,35 +1,46 @@
 <mujoco model="welding_cell_environment">
   <compiler angle="radian" meshdir="../meshes" />
   <option timestep="0.001" integrator="implicitfast" />
+  <visual>
+    <headlight ambient="0 0 0" diffuse="0 0 0" specular="0 0 0" />
+  </visual>
   <asset>
     <mesh name="welding_table_visual" file="welding_table_visual.obj" />
+    <material name="welding_table_visual_fullbright" rgba="0.18 0.22 0.25 1" emission="1" specular="0" shininess="0" />
     <mesh name="metal_clamp_front" file="metal_clamp_front.obj" />
+    <material name="metal_clamp_front_fullbright" rgba="0.50 0.52 0.54 1" emission="1" specular="0" shininess="0" />
     <mesh name="metal_clamp_rear" file="metal_clamp_rear.obj" />
+    <material name="metal_clamp_rear_fullbright" rgba="0.50 0.52 0.54 1" emission="1" specular="0" shininess="0" />
     <mesh name="metal_welding_sample" file="metal_welding_sample.obj" />
+    <material name="metal_welding_sample_fullbright" rgba="0.62 0.64 0.65 1" emission="1" specular="0" shininess="0" />
     <mesh name="robot_mount_plate" file="robot_mount_plate.obj" />
+    <material name="robot_mount_plate_fullbright" rgba="0.44 0.47 0.50 1" emission="1" specular="0" shininess="0" />
     <mesh name="workcell_floor" file="workcell_floor.obj" />
+    <material name="workcell_floor_fullbright" rgba="0.18 0.19 0.21 1" emission="1" specular="0" shininess="0" />
     <mesh name="workcell_wall_x" file="workcell_wall_x.obj" />
+    <material name="workcell_wall_x_fullbright" rgba="0.67 0.69 0.70 1" emission="1" specular="0" shininess="0" />
     <mesh name="workcell_wall_y" file="workcell_wall_y.obj" />
+    <material name="workcell_wall_y_fullbright" rgba="0.67 0.69 0.70 1" emission="1" specular="0" shininess="0" />
     <mesh name="workcell_wall_ribs" file="workcell_wall_ribs.obj" />
+    <material name="workcell_wall_ribs_fullbright" rgba="0.67 0.69 0.70 1" emission="1" specular="0" shininess="0" />
     <mesh name="workcell_wall_rails" file="workcell_wall_rails.obj" />
+    <material name="workcell_wall_rails_fullbright" rgba="0.44 0.47 0.50 1" emission="1" specular="0" shininess="0" />
   </asset>
   <worldbody>
     <camera name="overview" pos="2.3 -2.6 2.0" xyaxes="0.75 0.66 0 -0.30 0.34 0.89" />
-    <light pos="0 0 3" dir="0 0 -1" diffuse="0.85 0.85 0.85" />
-    <light pos="-1.5 -1 1.8" dir="0.6 0.5 -0.8" diffuse="0.45 0.48 0.52" />
-    <geom name="visual_welding_table_visual" type="mesh" mesh="welding_table_visual" contype="0" conaffinity="0" group="2" rgba="0.18 0.22 0.25 1" />
-    <geom name="visual_metal_clamp_front" type="mesh" mesh="metal_clamp_front" contype="0" conaffinity="0" group="2" rgba="0.50 0.52 0.54 1" />
-    <geom name="visual_metal_clamp_rear" type="mesh" mesh="metal_clamp_rear" contype="0" conaffinity="0" group="2" rgba="0.50 0.52 0.54 1" />
-    <geom name="visual_metal_welding_sample" type="mesh" mesh="metal_welding_sample" contype="0" conaffinity="0" group="2" rgba="0.62 0.64 0.65 1" />
-    <geom name="visual_robot_mount_plate" type="mesh" mesh="robot_mount_plate" contype="0" conaffinity="0" group="2" rgba="0.44 0.47 0.50 1" />
-    <geom name="visual_workcell_floor" type="mesh" mesh="workcell_floor" contype="0" conaffinity="0" group="2" rgba="0.18 0.19 0.21 1" />
-    <geom name="visual_workcell_wall_x" type="mesh" mesh="workcell_wall_x" contype="0" conaffinity="0" group="2" rgba="0.67 0.69 0.70 1" />
-    <geom name="visual_workcell_wall_y" type="mesh" mesh="workcell_wall_y" contype="0" conaffinity="0" group="2" rgba="0.67 0.69 0.70 1" />
-    <geom name="visual_workcell_wall_ribs" type="mesh" mesh="workcell_wall_ribs" contype="0" conaffinity="0" group="2" rgba="0.67 0.69 0.70 1" />
-    <geom name="visual_workcell_wall_rails" type="mesh" mesh="workcell_wall_rails" contype="0" conaffinity="0" group="2" rgba="0.44 0.47 0.50 1" />
-    <geom name="floor" type="box" pos="-0.126 0.08 -0.04" quat="1 0 0 0" size="1.424 1.17 0.04" friction="0.8 0.01 0.001" group="3" rgba="0.18 0.19 0.21 1" />
-    <geom name="wall_x" type="box" pos="1.323 0.08 1.17385" quat="1 0 0 0" size="0.025 1.17 1.17385" friction="0.8 0.01 0.001" group="3" rgba="0.67 0.69 0.70 1" />
-    <geom name="wall_y" type="box" pos="-0.126 -1.115 1.17385" quat="1 0 0 0" size="1.424 0.025 1.17385" friction="0.8 0.01 0.001" group="3" rgba="0.67 0.69 0.70 1" />
+    <geom name="visual_welding_table_visual" type="mesh" mesh="welding_table_visual" material="welding_table_visual_fullbright" contype="0" conaffinity="0" group="2" />
+    <geom name="visual_metal_clamp_front" type="mesh" mesh="metal_clamp_front" material="metal_clamp_front_fullbright" contype="0" conaffinity="0" group="2" />
+    <geom name="visual_metal_clamp_rear" type="mesh" mesh="metal_clamp_rear" material="metal_clamp_rear_fullbright" contype="0" conaffinity="0" group="2" />
+    <geom name="visual_metal_welding_sample" type="mesh" mesh="metal_welding_sample" material="metal_welding_sample_fullbright" contype="0" conaffinity="0" group="2" />
+    <geom name="visual_robot_mount_plate" type="mesh" mesh="robot_mount_plate" material="robot_mount_plate_fullbright" contype="0" conaffinity="0" group="2" />
+    <geom name="visual_workcell_floor" type="mesh" mesh="workcell_floor" material="workcell_floor_fullbright" contype="0" conaffinity="0" group="2" />
+    <geom name="visual_workcell_wall_x" type="mesh" mesh="workcell_wall_x" material="workcell_wall_x_fullbright" contype="0" conaffinity="0" group="2" />
+    <geom name="visual_workcell_wall_y" type="mesh" mesh="workcell_wall_y" material="workcell_wall_y_fullbright" contype="0" conaffinity="0" group="2" />
+    <geom name="visual_workcell_wall_ribs" type="mesh" mesh="workcell_wall_ribs" material="workcell_wall_ribs_fullbright" contype="0" conaffinity="0" group="2" />
+    <geom name="visual_workcell_wall_rails" type="mesh" mesh="workcell_wall_rails" material="workcell_wall_rails_fullbright" contype="0" conaffinity="0" group="2" />
+    <geom name="floor" type="box" pos="-0.126 0.08 -0.04" quat="1 0 0 0" size="1.424 1.17 0.04" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
+    <geom name="wall_x" type="box" pos="1.323 0.08 1.17385" quat="1 0 0 0" size="0.025 1.17 1.17385" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
+    <geom name="wall_y" type="box" pos="-0.126 -1.115 1.17385" quat="1 0 0 0" size="1.424 0.025 1.17385" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="table_top" type="box" pos="0 0 0.5969" quat="1 0 0 0" size="0.381 0.6858 0.0508" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="robot_mount_plate" type="box" pos="0.1 0.5 0.657225" quat="1 0 0 0" size="0.1524 0.1397 0.009525" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="table_leg_-0.33_-0.64" type="box" pos="-0.33 -0.635 0.27305" quat="1 0 0 0" size="0.0381 0.0381 0.27305" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
@@ -40,10 +51,10 @@
     <geom name="Metal_Clamp_Front_part_01" type="box" pos="-0.109896246 -0.32707476 0.712903311" quat="0.266463906 -0.414248943 -0.573060274 -0.654978454" size="0.0839705091 0.0180314495 0.00900000928" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Front_part_02" type="box" pos="-0.112470398 -0.322955272 0.746285852" quat="0.213716105 -0.458363086 -0.538427711 -0.674035907" size="0.0797355088 0.00946792919 0.00675001916" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Front_part_03" type="box" pos="-0.110731792 -0.325737621 0.736149464" quat="0.250830323 -0.427744538 -0.563058496 -0.661123216" size="0.0606953394 0.00721557407 0.00360000611" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
-    <geom name="Metal_Clamp_Front_part_04" type="box" pos="-0.0762000084 -0.381000012 0.636150062" quat="0.383615404 0.594002724 0.383615404 0.594002724" size="0.0414000155 0.00943019026 0.00943019032" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
+    <geom name="Metal_Clamp_Front_part_04" type="box" pos="-0.0762000084 -0.381000012 0.636150062" quat="0.383615404 0.594002724 0.383615404 0.594002724" size="0.0414000155 0.00943019028 0.00943019034" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Front_part_05" type="box" pos="-0.0762000067 -0.381000013 0.675750077" quat="0.411637723 0.574938595 0.411637723 0.574938595" size="0.0112500191 0.0152217526 0.0152217579" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Front_part_06" type="box" pos="-0.0762000084 -0.381000012 0.695550054" quat="0.342812002 0.342811972 0.618449628 -0.618449688" size="0.0180000012 0.0171000071 0.0135000115" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
-    <geom name="Metal_Clamp_Front_part_07" type="box" pos="-0.00275318692 -0.498539478 0.672150075" quat="1.20883609e-10 -0.745819569 0.666148007 1.35562755e-10" size="0.0161509753 0.0161509697 0.00360000134" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
+    <geom name="Metal_Clamp_Front_part_07" type="box" pos="-0.00275318692 -0.498539478 0.672150075" quat="1.20883595e-10 -0.745819569 0.666148007 1.35562742e-10" size="0.0161509753 0.0161509697 0.00360000134" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Front_part_08" type="box" pos="-0.0027531799 -0.498539461 0.678450048" quat="0.140394121 0.693029225 0.140394121 0.693029225" size="0.00900000334 0.00533491961 0.00533492444" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Front_part_09" type="box" pos="-0.0733384403 -0.385579478 0.723450067" quat="0.172217578 -0.215213999 0.750540316 0.600594282" size="0.0135000107 0.00809328197 0.00809327535" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Front_part_10" type="box" pos="-0.0876462648 -0.362682176 0.725250065" quat="0.187265664 -0.202256218 0.705350518 0.653073251" size="0.0117000104 0.00538403506 0.00538402715" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
@@ -58,15 +69,15 @@
     <geom name="Metal_Clamp_Rear_part_04" type="box" pos="0.177799985 -0.381000012 0.636150002" quat="0.651732326 0.274308205 0.651732385 0.274308205" size="0.0414000155 0.00944737493 0.00944739492" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Rear_part_05" type="box" pos="0.177799985 -0.381000012 0.675750017" quat="0.322923928 -0.629062891 0.322923928 -0.629062891" size="0.0112500191 0.0151743966 0.0151743845" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Rear_part_06" type="box" pos="0.177799985 -0.381000012 0.695549995" quat="0.342812032 -0.342812032 0.618449569 0.618449628" size="0.0179999941 0.0171000063 0.0135000014" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
-    <geom name="Metal_Clamp_Rear_part_07" type="box" pos="0.104353184 -0.498539491 0.672150016" quat="1.64869718e-13 0.905390024 -0.424580812 4.15087776e-15" size="0.0161739687 0.0161739801 0.00360000134" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
+    <geom name="Metal_Clamp_Rear_part_07" type="box" pos="0.104353184 -0.498539491 0.672150016" quat="1.64869095e-13 0.905390024 -0.424580812 4.14556729e-15" size="0.0161739687 0.0161739801 0.00360000134" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Rear_part_08" type="box" pos="0.10435319 -0.498539489 0.678449988" quat="0.631713212 0.317708135 0.631713212 0.317708135" size="0.00900000334 0.00539050321 0.00539049945" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Rear_part_09" type="box" pos="0.174938422 -0.385579472 0.72345001" quat="0.289374739 0.916671336 -0.262851268 0.0829768851" size="0.0135000082 0.00806869076 0.00806869114" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
-    <geom name="Metal_Clamp_Rear_part_10" type="box" pos="0.189246241 -0.362682167 0.725250002" quat="0.160199225 -0.224303797 -0.782240093 -0.558681071" size="0.0117000088 0.00539929847 0.0053992903" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
+    <geom name="Metal_Clamp_Rear_part_10" type="box" pos="0.189246241 -0.362682167 0.725250002" quat="0.782240093 -0.558681071 0.160199225 0.224303797" size="0.0117000088 0.00539929847 0.0053992903" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Rear_part_11" type="box" pos="0.24766983 -0.269184867 0.721199995" quat="0.0678740814 0.483347625 -0.871982098 -0.037623018" size="0.0378053661 0.00450000316 0.00270000894" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Rear_part_12" type="box" pos="0.268416167 -0.235983792 0.704550026" quat="0.356217265 0.593278944 0.32885772 0.642636716" size="0.0225719026 0.00315000679 0.0022500107" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Rear_part_13" type="box" pos="0.277239326 -0.221863779 0.685650022" quat="0.103763238 0.481385678 -0.868442833 -0.0575161651" size="0.0152801462 0.00315001105 0.00224999626" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Clamp_Rear_part_14" type="box" pos="0.228354278 -0.300096211 0.714450032" quat="0.194905207 -0.194905162 -0.67971462 -0.67971468" size="0.010800007 0.00810000433 0.00809999647" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
-    <geom name="Metal_Welding_Sample_part_00" type="box" pos="0.0549999962 -0.444999993 0.654957145" quat="2.2858029e-15 0.707106829 -0.707106829 -2.28720665e-15" size="0.0762000094 0.0508000051 0.00725713372" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
+    <geom name="Metal_Welding_Sample_part_00" type="box" pos="0.0549999962 -0.444999993 0.654957145" quat="2.28561782e-15 0.707106829 -0.707106829 -2.28532284e-15" size="0.0762000094 0.0508000051 0.00725713372" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
     <geom name="Metal_Welding_Sample_part_01" type="box" pos="0.00645777217 -0.444999993 0.664028585" quat="0.5 0.5 0.5 -0.5" size="0.0728133321 0.00272142887 0.00225777947" friction="0.8 0.01 0.001" group="3" rgba="0 0 0 0" />
   </worldbody>
 </mujoco>

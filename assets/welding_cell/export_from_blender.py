@@ -1,7 +1,8 @@
-"""Export the Blender-authored metric welding-cell assets and collision manifest.
+"""Export the metric welding-cell reconstruction aligned against the captured splat.
 
-Run from Blender's Scripting workspace. The Gaussian splat remains in the .blend;
-only the modeled table, fixtures, mount plate, floor, and walls are exported.
+Run this script in the authored reconstruction .blend. The Gaussian source is
+distributed separately as ``source/welding_cell.spz``; visual meshes and collision
+proxies are exported in the same canonical metric frame.
 """
 from __future__ import annotations
 
@@ -17,6 +18,7 @@ SOURCE_PATH = Path(__file__).resolve() if "__file__" in globals() else Path(bpy.
 OUT = SOURCE_PATH.parent
 TABLE = bpy.data.objects["Welding_Table_Visual"]
 FLOOR_TO_TABLE_TOP = 0.6477
+SOURCE_SPZ = "source/welding_cell.spz"
 VISUAL_OBJECTS = (
     "Welding_Table_Visual",
     "Metal_Clamp_Front",
@@ -54,6 +56,20 @@ def ensure_mount_plate():
 
 def physics_matrix(obj):
     return Matrix.Translation((0, 0, FLOOR_TO_TABLE_TOP)) @ TABLE.matrix_world.inverted() @ obj.matrix_world
+
+def splat_transform():
+    matrix = Matrix.Translation((0, 0, FLOOR_TO_TABLE_TOP)) @ TABLE.matrix_world.inverted()
+    position, quaternion, scale = matrix.decompose()
+    return {
+        "position": [float(value) for value in position],
+        "quaternion_xyzw": [
+            float(quaternion.x),
+            float(quaternion.y),
+            float(quaternion.z),
+            float(quaternion.w),
+        ],
+        "scale": [float(value) for value in scale],
+    }
 
 
 def evaluated_geometry(obj):
@@ -147,6 +163,8 @@ def main():
         "frame": "floor origin below table center; +X across the 30 in table width; +Y along the 54 in table length",
         "source_blend": bpy.data.filepath,
         "floor_to_table_top_m": FLOOR_TO_TABLE_TOP,
+        "source_spz": SOURCE_SPZ,
+        "source_spz_transform": splat_transform(),
         "table_top_size_m": [0.762, 1.3716, 0.1016],
         "hole_diameter_m": 0.01905,
         "hole_pitch_m": 0.0508,

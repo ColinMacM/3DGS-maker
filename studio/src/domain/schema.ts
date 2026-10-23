@@ -1,4 +1,3 @@
-import { createDefaultViewportSettings } from "./defaultDocument";
 import { isBlobObjectUrl, markReferenceUnavailable } from "./referenceAvailability";
 import type {
   LayerVisibility,
@@ -44,18 +43,15 @@ const TRANSFORM_KEYS = ["position", "quaternionXyzw", "scale"] as const;
 const LAYER_KEYS = ["catalogVisuals", "parametricModel", "collisions", "reference", "measurements"] as const;
 const REFERENCE_KEYS = ["id", "name", "kind", "objectUrl", "transform", "opacity", "visible"] as const;
 const MEASUREMENT_KEYS = ["id", "label", "start", "end"] as const;
-const VIEWPORT_KEYS = ["overheadLight"] as const;
-const OVERHEAD_LIGHT_KEYS = ["enabled", "color", "intensity", "position", "target"] as const;
+const VIEWPORT_KEYS: readonly string[] = [];
 const ENTITY_BASE_KEYS = ["id", "name", "kind", "visible", "parentId", "transform"] as const;
-const MATERIAL_KEYS = ["color", "metalness", "roughness", "opacity"] as const;
+const MATERIAL_KEYS = ["color", "opacity"] as const;
 const ENTITY_KINDS: Readonly<Record<SceneEntityKind, true>> = {
   box: true,
   sphere: true,
   cylinder: true,
   capsule: true,
   model: true,
-  "directional-light": true,
-  "point-light": true,
   group: true,
   label: true,
 };
@@ -65,8 +61,6 @@ const ENTITY_KIND_KEYS: Readonly<Record<SceneEntityKind, readonly string[]>> = {
   cylinder: ["radius", "height", "material"],
   capsule: ["radius", "height", "material"],
   model: ["source"],
-  "directional-light": ["color", "intensity", "target"],
-  "point-light": ["color", "intensity", "distance"],
   group: [],
   label: ["text", "color", "backgroundColor", "size"],
 };
@@ -212,35 +206,16 @@ function parseViewport(value: unknown, path: string, issues: ValidationIssue[]):
   const input = requireRecord(value, path, issues);
   const { toby: _removedToby, ...record } = input;
   rejectUnknownKeys(record, VIEWPORT_KEYS, path, issues);
-
-  const overheadPath = `${path}.overheadLight`;
-  const overhead = requireRecord(record.overheadLight, overheadPath, issues);
-  rejectUnknownKeys(overhead, OVERHEAD_LIGHT_KEYS, overheadPath, issues);
-
-  return {
-    overheadLight: {
-      enabled: boolean(overhead.enabled, `${overheadPath}.enabled`, issues),
-      color: color(overhead.color, `${overheadPath}.color`, issues),
-      intensity: nonnegativeNumber(overhead.intensity, `${overheadPath}.intensity`, issues, 100),
-      position: tuple(overhead.position, 3, `${overheadPath}.position`, issues) as Vec3,
-      target: tuple(overhead.target, 3, `${overheadPath}.target`, issues) as Vec3,
-    },
-  };
+  return {};
 }
 
 function parseMaterial(value: unknown, path: string, issues: ValidationIssue[]): SceneMaterial {
   const record = requireRecord(value, path, issues);
   rejectUnknownKeys(record, MATERIAL_KEYS, path, issues);
-  const metalness = finiteNumber(record.metalness, `${path}.metalness`, issues);
-  const roughness = finiteNumber(record.roughness, `${path}.roughness`, issues);
   const opacity = finiteNumber(record.opacity, `${path}.opacity`, issues);
-  if (metalness < 0 || metalness > 1) issues.push({ path: `${path}.metalness`, message: "must be between 0 and 1" });
-  if (roughness < 0 || roughness > 1) issues.push({ path: `${path}.roughness`, message: "must be between 0 and 1" });
   if (opacity < 0 || opacity > 1) issues.push({ path: `${path}.opacity`, message: "must be between 0 and 1" });
   return {
     color: color(record.color, `${path}.color`, issues),
-    metalness,
-    roughness,
     opacity,
   };
 }
@@ -319,22 +294,6 @@ function parseEntity(value: unknown, path: string, issues: ValidationIssue[]): S
       }
       return { ...base, kind, source };
     }
-    case "directional-light":
-      return {
-        ...base,
-        kind,
-        color: color(record.color, `${path}.color`, issues),
-        intensity: nonnegativeNumber(record.intensity, `${path}.intensity`, issues, 100),
-        target: tuple(record.target, 3, `${path}.target`, issues) as Vec3,
-      };
-    case "point-light":
-      return {
-        ...base,
-        kind,
-        color: color(record.color, `${path}.color`, issues),
-        intensity: nonnegativeNumber(record.intensity, `${path}.intensity`, issues, 100),
-        distance: nonnegativeNumber(record.distance, `${path}.distance`, issues, 1000),
-      };
     case "label":
       return {
         ...base,
@@ -366,9 +325,6 @@ function validateEntityHierarchy(
     }
     if (parent.kind !== "group") {
       issues.push({ path: `${path}[${index}].parentId`, message: "must reference a group entity" });
-    }
-    if (entity.kind === "directional-light") {
-      issues.push({ path: `${path}[${index}].parentId`, message: "directional lights must be top-level" });
     }
   });
 
@@ -448,15 +404,57 @@ function rejectDuplicateIds(values: readonly { id: string }[], path: string, iss
   });
 }
 
-/** Validates unknown input and returns a detached canonical document. */
+function migrateVersion1(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+  const document = value as Record<string, unknown>;
+  if (document.schemaVersion !== 1) return value;
+
+  const entities = Array.isArray(document.entities)
+    ? document.entities
+        .filter((entity) => (
+          typeof entity !== "object"
+          || entity === null
+          || Array.isArray(entity)
+          || !["directional-light", "point-light"].includes(
+            String((entity as Record<string, unknown>).kind),
+          )
+        ))
+        .map((entity) => {
+          if (typeof entity !== "object" || entity === null || Array.isArray(entity)) return entity;
+          const record = entity as Record<string, unknown>;
+          const material = record.material;
+          if (typeof material !== "object" || material === null || Array.isArray(material)) {
+            return entity;
+          }
+          const {
+            metalness: _removedMetalness,
+            roughness: _removedRoughness,
+            ...fullbrightMaterial
+          } = material as Record<string, unknown>;
+          return { ...record, material: fullbrightMaterial };
+        })
+    : document.entities;
+
+  return {
+    ...document,
+    schemaVersion: 2,
+    assetVersion: document.assetId === "welding-cell" && document.assetVersion === "1.0.0"
+      ? "1.1.0"
+      : document.assetVersion,
+    viewport: {},
+    entities,
+  };
+}
+
+/** Validates v2 input, migrating persisted v1 lighting state to fullbright data. */
 export function validateStudioDocument(value: unknown): StudioDocument {
   const issues: ValidationIssue[] = [];
-  const record = requireRecord(value, "$", issues);
+  const record = requireRecord(migrateVersion1(value), "$", issues);
   rejectUnknownKeys(record, DOCUMENT_KEYS, "$", issues);
-
-  if (record.schemaVersion !== 1) issues.push({ path: "$.schemaVersion", message: "must equal 1" });
+  if (record.schemaVersion !== 2) issues.push({ path: "$.schemaVersion", message: "must equal 2" });
   if (record.units !== "m") issues.push({ path: "$.units", message: 'must equal "m"' });
   if (record.upAxis !== "Z") issues.push({ path: "$.upAxis", message: 'must equal "Z"' });
+
 
   const references = parseArray(record.references, "$.references", issues, 32, parseReference);
   const entities = parseArray(record.entities ?? [], "$.entities", issues, 256, parseEntity);
@@ -472,7 +470,7 @@ export function validateStudioDocument(value: unknown): StudioDocument {
   }
 
   const document: StudioDocument = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: requiredString(record.id, "$.id", issues),
     name: requiredString(record.name, "$.name", issues),
     units: "m",
@@ -482,11 +480,7 @@ export function validateStudioDocument(value: unknown): StudioDocument {
     table: parseTable(record.table, "$.table", issues),
     tableTransform: parseTransform(record.tableTransform, "$.tableTransform", issues),
     layers: parseLayers(record.layers, "$.layers", issues),
-    viewport: parseViewport(
-      record.viewport ?? createDefaultViewportSettings(),
-      "$.viewport",
-      issues,
-    ),
+    viewport: parseViewport(record.viewport ?? {}, "$.viewport", issues),
     entities,
     references,
     measurements,

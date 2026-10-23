@@ -1,4 +1,4 @@
-import type { CatalogEntry, CollisionBox, Vec3 } from "../domain/types";
+import type { CatalogEntry, CollisionBox, Transform, Vec3 } from "../domain/types";
 
 interface CatalogIndex {
   schemaVersion: 1;
@@ -26,6 +26,28 @@ function vec3(value: unknown, context: string): Vec3 {
   return [value[0] as number, value[1] as number, value[2] as number];
 }
 
+function transform(value: unknown, context: string): Transform {
+  const item = record(value, context);
+  const quaternion = item.quaternionXyzw;
+  if (
+    !Array.isArray(quaternion)
+    || quaternion.length !== 4
+    || quaternion.some((part) => typeof part !== "number" || !Number.isFinite(part))
+    || quaternion.every((part) => part === 0)
+  ) {
+    throw new Error(`${context}.quaternionXyzw must contain four finite values and must not be zero.`);
+  }
+  const scale = vec3(item.scale, `${context}.scale`);
+  if (scale.some((part) => part <= 0)) {
+    throw new Error(`${context}.scale values must be greater than zero.`);
+  }
+  return {
+    position: vec3(item.position, `${context}.position`),
+    quaternionXyzw: [quaternion[0], quaternion[1], quaternion[2], quaternion[3]],
+    scale,
+  };
+}
+
 function catalogEntry(value: unknown, index: number): CatalogEntry {
   const item = record(value, `Catalog asset ${index + 1}`);
   if (item.schemaVersion !== 1 || item.units !== "m" || item.upAxis !== "Z") {
@@ -33,6 +55,9 @@ function catalogEntry(value: unknown, index: number): CatalogEntry {
   }
   const browser = record(item.browser, `Catalog asset ${index + 1} browser`);
   const source = record(item.source, `Catalog asset ${index + 1} source`);
+  const spz = browser.spz === undefined
+    ? undefined
+    : record(browser.spz, `Catalog asset ${index + 1} browser SPZ`);
   const simulator = record(item.simulator, `Catalog asset ${index + 1} simulator`);
   if (!Array.isArray(item.capabilities) || item.capabilities.some((value) => typeof value !== "string")) {
     throw new Error(`Catalog asset ${index + 1} capabilities must be strings.`);
@@ -46,7 +71,15 @@ function catalogEntry(value: unknown, index: number): CatalogEntry {
     ...(typeof item.thumbnail === "string" ? { thumbnail: item.thumbnail } : {}),
     units: "m",
     upAxis: "Z",
-    browser: { glb: text(browser.glb, `Catalog asset ${index + 1} browser GLB`) },
+    browser: {
+      glb: text(browser.glb, `Catalog asset ${index + 1} browser GLB`),
+      ...(spz ? {
+        spz: {
+          url: text(spz.url, `Catalog asset ${index + 1} browser SPZ URL`),
+          transform: transform(spz.transform, `Catalog asset ${index + 1} browser SPZ transform`),
+        },
+      } : {}),
+    },
     manifest: text(item.manifest, `Catalog asset ${index + 1} manifest`),
     source: { blend: text(source.blend, `Catalog asset ${index + 1} Blender source`) },
     simulator: {

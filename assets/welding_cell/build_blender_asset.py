@@ -1,4 +1,4 @@
-"""Build a clean .blend containing only the modeled welding-cell assets."""
+"""Build a clean, fullbright .blend from the workcell meshes reconstructed against the captured splat."""
 from __future__ import annotations
 
 import json
@@ -26,12 +26,12 @@ VISUALS = (
 )
 
 MATERIALS = {
-    "Dark Steel": ((0.18, 0.22, 0.25, 1.0), 0.82, 0.24),
-    "Fixture Steel": ((0.50, 0.52, 0.54, 1.0), 0.90, 0.18),
-    "Welding Sample": ((0.62, 0.64, 0.65, 1.0), 0.92, 0.20),
-    "Aluminum": ((0.44, 0.47, 0.50, 1.0), 0.86, 0.24),
-    "Floor": ((0.18, 0.19, 0.21, 1.0), 0.05, 0.72),
-    "Wall": ((0.67, 0.69, 0.70, 1.0), 0.05, 0.58),
+    "Dark Steel": (0.18, 0.22, 0.25, 1.0),
+    "Fixture Steel": (0.50, 0.52, 0.54, 1.0),
+    "Welding Sample": (0.62, 0.64, 0.65, 1.0),
+    "Aluminum": (0.44, 0.47, 0.50, 1.0),
+    "Floor": (0.18, 0.19, 0.21, 1.0),
+    "Wall": (0.67, 0.69, 0.70, 1.0),
 }
 
 
@@ -44,13 +44,16 @@ def reset():
 
 
 def make_material(name):
-    color, metallic, roughness = MATERIALS[name]
     material = bpy.data.materials.new(name)
     material.use_nodes = True
-    shader = next(node for node in material.node_tree.nodes if node.type == "BSDF_PRINCIPLED")
-    shader.inputs["Base Color"].default_value = color
-    shader.inputs["Metallic"].default_value = metallic
-    shader.inputs["Roughness"].default_value = roughness
+    nodes = material.node_tree.nodes
+    nodes.clear()
+    nodes.new(type="ShaderNodeOutputMaterial")
+    nodes.new(type="ShaderNodeEmission")
+    output = next(node for node in nodes if node.type == "OUTPUT_MATERIAL")
+    emission = next(node for node in nodes if node.type == "EMISSION")
+    next(socket for socket in emission.inputs if socket.type == "RGBA").default_value = MATERIALS[name]
+    material.node_tree.links.new(emission.outputs[0], output.inputs[0])
     return material
 
 
@@ -102,7 +105,7 @@ def main():
     scene.unit_settings.system = "METRIC"
     scene.unit_settings.length_unit = "METERS"
     scene["coordinate_frame"] = "Z-up; floor z=0; table top z=0.6477 m"
-    scene["contents"] = "Blender-authored assets only; no Gaussian splat or robot"
+    scene["contents"] = "Splat-derived fullbright environment; source SPZ is stored separately; no robot or scene lights"
     visuals = bpy.data.collections.new("Visuals")
     collisions = bpy.data.collections.new("Collision Proxies")
     scene.collection.children.link(visuals)
@@ -124,19 +127,12 @@ def main():
     camera_data.lens = 48
     scene.camera = camera
 
-    light_data = bpy.data.lights.new("Asset Key Light", "AREA")
-    light_data.energy = 1700
-    light_data.shape = "DISK"
-    light_data.size = 4.0
-    light = bpy.data.objects.new("Asset Key Light", light_data)
-    scene.collection.objects.link(light)
-    light.location = (0, -0.2, 3.5)
 
     world = bpy.data.worlds.get("World") or bpy.data.worlds.new("World")
     world.use_nodes = True
-    background = world.node_tree.nodes.get("Background")
+    background = next(node for node in world.node_tree.nodes if node.type == "BACKGROUND")
     background.inputs["Color"].default_value = (0.035, 0.04, 0.05, 1.0)
-    background.inputs["Strength"].default_value = 0.45
+    background.inputs["Strength"].default_value = 0.0
     scene.world = world
 
     bpy.ops.wm.save_as_mainfile(filepath=str(OUTPUT), compress=True)

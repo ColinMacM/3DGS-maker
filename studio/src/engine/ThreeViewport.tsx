@@ -6,18 +6,15 @@ import {
 } from "react";
 import type { CSSProperties } from "react";
 import {
-  ACESFilmicToneMapping,
   Box3,
   BoxGeometry,
   BoxHelper,
   BufferGeometry,
   CanvasTexture,
   Color,
-  DirectionalLight,
   DoubleSide,
   GridHelper,
   Group,
-  HemisphereLight,
   Line,
   LineBasicMaterial,
   LinearFilter,
@@ -26,7 +23,6 @@ import {
   MeshBasicMaterial,
   LoadingManager,
   Object3D,
-  PCFSoftShadowMap,
   PerspectiveCamera,
   Plane,
   Raycaster,
@@ -71,6 +67,7 @@ import {
 } from "./dispose";
 import { createParametricTable } from "./ParametricTable";
 import { SceneEntityRenderer } from "./SceneEntities";
+import { makeObjectMaterialsUnlit } from "./unlit";
 
 export interface ThreeViewportHandle {
   focus(): void;
@@ -109,6 +106,8 @@ interface PickResult {
 
 type SparkModule = typeof SparkTypes;
 type SparkRendererInstance = InstanceType<SparkModule["SparkRenderer"]>;
+const SPLAT_LOD_THRESHOLD = 250_000;
+
 
 interface StudioSplat extends Object3D {
   opacity: number;
@@ -299,14 +298,6 @@ function createMeasurements(measurements: Measurement[]): Group {
 }
 
 
-function markShadows(root: Object3D): void {
-  root.traverse((object) => {
-    if (object instanceof Mesh) {
-      object.castShadow = true;
-      object.receiveShadow = true;
-    }
-  });
-}
 
 class ViewportEngine {
   private readonly host: HTMLDivElement;
@@ -324,8 +315,6 @@ class ViewportEngine {
   private readonly measurementRoot = new Group();
   private readonly entityRoot = new Group();
   private readonly entityRenderer: SceneEntityRenderer;
-  private readonly overheadLight = new DirectionalLight();
-  private readonly overheadTarget = new Object3D();
   private readonly raycaster = new Raycaster();
   private readonly pointer = new Vector2();
   private readonly gltfLoader = new GLTFLoader();
@@ -350,7 +339,6 @@ class ViewportEngine {
   private tableParameters: StudioDocument["table"] | null = null;
   private measurementDefinitions: Measurement[] | null = null;
   private entityDefinitions: StudioDocument["entities"] | null = null;
-  private viewportSettings: StudioDocument["viewport"] | null = null;
   private manifest: { collision_boxes: CollisionBox[] } | null = null;
   private catalogKey = "";
   private catalogGeneration = 0;
@@ -385,10 +373,6 @@ class ViewportEngine {
       powerPreference: "high-performance",
     });
     this.renderer.outputColorSpace = SRGBColorSpace;
-    this.renderer.toneMapping = ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.08;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = PCFSoftShadowMap;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.domElement.style.display = "block";
     this.renderer.domElement.style.width = "100%";
@@ -442,24 +426,6 @@ class ViewportEngine {
     grid.name = "Metric floor grid";
     this.scene.add(grid);
 
-    const hemisphere = new HemisphereLight(0xdbe9ee, 0x253038, 1.65);
-    this.scene.add(hemisphere);
-    const key = new DirectionalLight(0xffffff, 3.2);
-    key.position.set(3.5, 6, 3.5);
-    key.castShadow = true;
-    key.shadow.mapSize.set(2048, 2048);
-    key.shadow.camera.near = 0.1;
-    key.shadow.camera.far = 25;
-    key.shadow.camera.left = -5;
-    key.shadow.camera.right = 5;
-    key.shadow.camera.top = 5;
-    key.shadow.camera.bottom = -5;
-    key.shadow.bias = -0.00015;
-    this.scene.add(key);
-
-    this.overheadLight.name = "Top-down work light";
-    this.overheadLight.target = this.overheadTarget;
-    this.scene.add(this.overheadLight, this.overheadTarget);
 
     this.transformControls = new TransformControls(
       this.camera,
@@ -551,15 +517,6 @@ class ViewportEngine {
       this.entityRenderer.update(document.entities);
     }
 
-    if (this.viewportSettings !== document.viewport) {
-      this.viewportSettings = document.viewport;
-      const { overheadLight } = document.viewport;
-      this.overheadLight.visible = overheadLight.enabled;
-      this.overheadLight.color.set(overheadLight.color);
-      this.overheadLight.intensity = overheadLight.intensity;
-      canonicalPointToThree(overheadLight.position, this.overheadLight.position);
-      canonicalPointToThree(overheadLight.target, this.overheadTarget.position);
-    }
 
     if (this.manifest !== manifest) {
       this.manifest = manifest;
@@ -727,7 +684,7 @@ class ViewportEngine {
 
   private updateCatalog(catalog: CatalogEntry | null): void {
     const key = catalog
-      ? `${catalog.id}\u0000${catalog.version}\u0000${catalog.browser.glb}`
+      ? JSON.stringify([catalog.id, catalog.version, catalog.browser])
       : "";
     if (key === this.catalogKey) return;
     this.catalogKey = key;
@@ -739,27 +696,58 @@ class ViewportEngine {
       : "catalog";
 
     if (!catalog) return;
-
     this.emitStatus({ message: `Loading ${catalog.name}…` });
-    this.gltfLoader
-      .loadAsync(catalog.browser.glb)
-      .then((gltf) => {
-        if (this.disposed || generation !== this.catalogGeneration) {
-          disposeObject3D(gltf.scene);
-          return;
-        }
-        markShadows(gltf.scene);
-        this.catalogRoot.add(gltf.scene);
-        this.presentScene();
-        this.emitStatus({ message: `${catalog.name} loaded` });
-      })
-      .catch((error: unknown) => {
-        if (this.disposed || generation !== this.catalogGeneration) return;
-        this.emitStatus({
-          message: `Catalog failed to load: ${errorMessage(error)}`,
+    void this.loadCatalog(catalog, generation);
+  }
+
+  private async loadCatalog(catalog: CatalogEntry, generation: number): Promise<void> {
+    const contents: Object3D[] = [];
+    const errors: string[] = [];
+
+    try {
+      const gltf = await this.gltfLoader.loadAsync(catalog.browser.glb);
+      makeObjectMaterialsUnlit(gltf.scene);
+      contents.push(gltf.scene);
+    } catch (error) {
+      errors.push(`GLB: ${errorMessage(error)}`);
+    }
+
+    if (catalog.browser.spz) {
+      try {
+        const spark = await this.ensureSparkRenderer();
+        const root = new Group();
+        applyCanonicalTransform(root, catalog.browser.spz.transform);
+        const splat = new spark.SplatMesh({
+          url: catalog.browser.spz.url,
+          fileName: catalog.browser.spz.url.split("/").pop() || "catalog.spz",
+          raycastable: true,
+          lod: true,
+          lodAbove: SPLAT_LOD_THRESHOLD,
+          enableLod: true,
         });
-        this.presentScene();
-      });
+        splat.userData.studioSplat = true;
+        root.add(splat);
+        await splat.initialized;
+        if (splat.splats && splat.splats.getNumSplats() > SPLAT_LOD_THRESHOLD) {
+          await splat.createLodSplats();
+        }
+        contents.push(root);
+      } catch (error) {
+        errors.push(`SPZ: ${errorMessage(error)}`);
+      }
+    }
+
+    if (this.disposed || generation !== this.catalogGeneration) {
+      for (const content of contents) disposeObject3D(content);
+      return;
+    }
+    for (const content of contents) this.catalogRoot.add(content);
+    this.presentScene();
+    this.emitStatus({
+      message: errors.length === 0
+        ? `${catalog.name} loaded`
+        : `${catalog.name} loaded with ${errors.join("; ")}`,
+    });
   }
 
   private updateReferences(
@@ -818,7 +806,11 @@ class ViewportEngine {
         throw new Error("Viewport was disposed while loading the splat renderer");
       }
       if (!this.sparkRenderer) {
-        const renderer = new spark.SparkRenderer({ renderer: this.renderer });
+        const renderer = new spark.SparkRenderer({
+          renderer: this.renderer,
+          enableLod: true,
+          lodSplatCount: SPLAT_LOD_THRESHOLD,
+        });
         renderer.name = "Gaussian splat renderer";
         this.scene.add(renderer);
         this.sparkRenderer = renderer;
@@ -867,22 +859,26 @@ class ViewportEngine {
           url: definition.objectUrl,
           fileName,
           raycastable: true,
+          lod: true,
+          lodAbove: SPLAT_LOD_THRESHOLD,
+          enableLod: true,
         });
         splat.userData.studioSplat = true;
         splat.opacity = Math.min(1, Math.max(0, pending.definition.opacity));
         content = splat;
         root.add(splat);
         await splat.initialized;
+        if (splat.splats && splat.splats.getNumSplats() > SPLAT_LOD_THRESHOLD) {
+          await splat.createLodSplats();
+        }
       } else if (extension === ".glb") {
         const gltf = await this.referenceGltfLoader.loadAsync(definition.objectUrl);
         content = gltf.scene;
-        // Standard glTF is Y-up. Convert it to the document's canonical Z-up
-        // before the viewport root performs the single Z-up-to-Y-up transform.
         content.rotation.x = Math.PI / 2;
-        markShadows(content);
+        makeObjectMaterialsUnlit(content);
       } else if (extension === ".obj") {
         content = await this.referenceObjLoader.loadAsync(definition.objectUrl);
-        markShadows(content);
+        makeObjectMaterialsUnlit(content);
       } else {
         throw new Error(
           "Unsupported reference format; use GLB, OBJ, PLY, SPLAT, KSPLAT, or SPZ",

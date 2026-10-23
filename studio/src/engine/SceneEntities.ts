@@ -7,14 +7,11 @@ import {
   CanvasTexture,
   CapsuleGeometry,
   CylinderGeometry,
-  DirectionalLight,
   DynamicDrawUsage,
   Group,
   LinearFilter,
   Mesh,
-  MeshStandardMaterial,
-  Object3D,
-  PointLight,
+  MeshBasicMaterial,
   Points,
   PointsMaterial,
   SphereGeometry,
@@ -32,6 +29,7 @@ import type {
 } from "../domain/types";
 import { applyCanonicalTransform } from "./coordinates";
 import { disposeObject3D } from "./dispose";
+import { makeObjectMaterialsUnlit } from "./unlit";
 
 interface EntityRuntime {
   definition: SceneEntity;
@@ -69,30 +67,21 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
-function createMaterial(definition: SceneMaterial): MeshStandardMaterial {
-  return new MeshStandardMaterial({
+function createMaterial(definition: SceneMaterial): MeshBasicMaterial {
+  const material = new MeshBasicMaterial({
     color: definition.color,
-    metalness: definition.metalness,
-    roughness: definition.roughness,
     opacity: definition.opacity,
     transparent: definition.opacity < 1,
     depthWrite: definition.opacity >= 1,
   });
+  material.toneMapped = false;
+  return material;
 }
 
 function markMesh(mesh: Mesh): Mesh {
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
+  mesh.castShadow = false;
+  mesh.receiveShadow = false;
   return mesh;
-}
-
-function markModel(root: Object3D): void {
-  root.traverse((object) => {
-    if (object instanceof Mesh) {
-      object.castShadow = true;
-      object.receiveShadow = true;
-    }
-  });
 }
 
 function createLabel(definition: LabelSceneEntity): Sprite | null {
@@ -453,15 +442,6 @@ export class SceneEntityRenderer {
   private populate(runtime: EntityRuntime): void {
     const { definition, root } = runtime;
 
-    if (definition.kind === "directional-light") {
-      const light = new DirectionalLight(definition.color, definition.intensity);
-      const target = new Object3D();
-      light.position.set(...definition.transform.position);
-      target.position.set(...definition.target);
-      light.target = target;
-      root.add(light, target);
-      return;
-    }
 
     applyCanonicalTransform(root, definition.transform);
     switch (definition.kind) {
@@ -495,13 +475,6 @@ export class SceneEntityRenderer {
         root.add(mesh);
         return;
       }
-      case "point-light":
-        root.add(new PointLight(
-          definition.color,
-          definition.intensity,
-          definition.distance,
-        ));
-        return;
       case "label": {
         const label = createLabel(definition);
         if (label) root.add(label);
@@ -513,7 +486,7 @@ export class SceneEntityRenderer {
             disposeObject3D(gltf.scene);
             return;
           }
-          markModel(gltf.scene);
+          makeObjectMaterialsUnlit(gltf.scene);
           root.add(gltf.scene);
         }).catch((error: unknown) => {
           if (this.disposed || this.runtimes.get(definition.id) !== runtime) return;
