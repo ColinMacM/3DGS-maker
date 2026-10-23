@@ -107,6 +107,8 @@ interface PickResult {
 type SparkModule = typeof SparkTypes;
 type SparkRendererInstance = InstanceType<SparkModule["SparkRenderer"]>;
 const SPLAT_LOD_THRESHOLD = 250_000;
+const SPLAT_VIEWER_COLOR_GAIN = 0.5;
+
 
 
 interface StudioSplat extends Object3D {
@@ -725,6 +727,11 @@ class ViewportEngine {
           lodAbove: SPLAT_LOD_THRESHOLD,
           enableLod: true,
         });
+        splat.recolor.setRGB(
+          SPLAT_VIEWER_COLOR_GAIN,
+          SPLAT_VIEWER_COLOR_GAIN,
+          SPLAT_VIEWER_COLOR_GAIN,
+        );
         splat.userData.studioSplat = true;
         root.add(splat);
         await splat.initialized;
@@ -863,6 +870,11 @@ class ViewportEngine {
           lodAbove: SPLAT_LOD_THRESHOLD,
           enableLod: true,
         });
+        splat.recolor.setRGB(
+          SPLAT_VIEWER_COLOR_GAIN,
+          SPLAT_VIEWER_COLOR_GAIN,
+          SPLAT_VIEWER_COLOR_GAIN,
+        );
         splat.userData.studioSplat = true;
         splat.opacity = Math.min(1, Math.max(0, pending.definition.opacity));
         content = splat;
