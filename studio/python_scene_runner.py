@@ -17,24 +17,15 @@ import traceback
 import uuid
 from typing import Any
 
+# Defaults shared with the MCP scene server (src/mcp/server.ts).
+DEFAULT_COLOR = "#b7834f"
+
 LAYER_NAMES = {
     "catalogVisuals",
-    "parametricModel",
+    "assetVisuals",
     "collisions",
     "reference",
     "measurements",
-}
-TABLE_FIELDS = {
-    "width",
-    "length",
-    "topThickness",
-    "topHeight",
-    "holeDiameter",
-    "holePitch",
-    "rows",
-    "columns",
-    "edgeToHole",
-    "legSize",
 }
 
 
@@ -54,25 +45,14 @@ def read_request() -> tuple[dict[str, Any], str]:
 def main() -> None:
     scene, script = read_request()
 
-    def set_table(**values: float | int) -> None:
-        unknown = set(values) - TABLE_FIELDS
-        if unknown:
-            raise ValueError(f"unknown table fields: {', '.join(sorted(unknown))}")
-        scene["table"].update(values)
 
-    def set_table_transform(
-        *,
-        position: list[float] | tuple[float, float, float] | None = None,
-        quaternion_xyzw: list[float] | tuple[float, float, float, float] | None = None,
-        scale: list[float] | tuple[float, float, float] | None = None,
-    ) -> None:
-        transform = scene["tableTransform"]
-        if position is not None:
-            transform["position"] = list(position)
-        if quaternion_xyzw is not None:
-            transform["quaternionXyzw"] = list(quaternion_xyzw)
-        if scale is not None:
-            transform["scale"] = list(scale)
+    def select_asset(asset_id: str, asset_version: str) -> None:
+        if not isinstance(asset_id, str) or not asset_id:
+            raise ValueError("asset_id must be a non-empty string")
+        if not isinstance(asset_version, str) or not asset_version:
+            raise ValueError("asset_version must be a non-empty string")
+        scene["assetId"] = asset_id
+        scene["assetVersion"] = asset_version
 
     def set_layer(name: str, visible: bool) -> None:
         if name not in LAYER_NAMES:
@@ -84,9 +64,8 @@ def main() -> None:
     def set_splat_visible(visible: bool) -> None:
         set_layer("catalogVisuals", visible)
 
-    def set_table_visible(visible: bool) -> None:
-        set_layer("parametricModel", visible)
-
+    def set_asset_visible(visible: bool) -> None:
+        set_layer("assetVisuals", visible)
 
     def add_measurement(
         start: list[float] | tuple[float, float, float],
@@ -111,6 +90,18 @@ def main() -> None:
             measurement
             for measurement in scene["measurements"]
             if measurement.get("id") != measurement_id
+        ]
+
+    def euler_degrees(x: float, y: float, z: float) -> list[float]:
+        """Return [x, y, z, w] for MCP rotationDegrees: Three.js intrinsic XYZ, R = Rx*Ry*Rz."""
+        hx, hy, hz = (math.radians(value) / 2 for value in (x, y, z))
+        c1, c2, c3 = math.cos(hx), math.cos(hy), math.cos(hz)
+        s1, s2, s3 = math.sin(hx), math.sin(hy), math.sin(hz)
+        return [
+            s1 * c2 * c3 + c1 * s2 * s3,
+            c1 * s2 * c3 - s1 * c2 * s3,
+            c1 * c2 * s3 + s1 * s2 * c3,
+            c1 * c2 * c3 - s1 * s2 * s3,
         ]
 
     def _transform(
@@ -173,6 +164,14 @@ def main() -> None:
         scene["entities"] = [
             entity for entity in entities if entity.get("id") not in removed
         ]
+        scene["collisions"] = [
+            collision
+            for collision in scene.get("collisions", [])
+            if not (
+                collision.get("kind") == "entity-box"
+                and collision.get("entityId") in removed
+            )
+        ]
 
     def move_entity(
         entity_id: str,
@@ -210,7 +209,7 @@ def main() -> None:
         position: list[float] | tuple[float, float, float] = (0, 0, 0),
         quaternion_xyzw: list[float] | tuple[float, float, float, float] = (0, 0, 0, 1),
         scale: list[float] | tuple[float, float, float] = (1, 1, 1),
-        color: str = "#b8c0c4",
+        color: str = DEFAULT_COLOR,
         opacity: float = 1,
         entity_id: str | None = None,
         parent_id: str | None = None,
@@ -227,7 +226,7 @@ def main() -> None:
         *,
         radius: float,
         position: list[float] | tuple[float, float, float] = (0, 0, 0),
-        color: str = "#b8c0c4",
+        color: str = DEFAULT_COLOR,
         opacity: float = 1,
         entity_id: str | None = None,
         parent_id: str | None = None,
@@ -266,7 +265,7 @@ def main() -> None:
         height: float,
         position: list[float] | tuple[float, float, float] = (0, 0, 0),
         quaternion_xyzw: list[float] | tuple[float, float, float, float] = (0, 0, 0, 1),
-        color: str = "#b8c0c4",
+        color: str = DEFAULT_COLOR,
         opacity: float = 1,
         entity_id: str | None = None,
         parent_id: str | None = None,
@@ -283,7 +282,7 @@ def main() -> None:
         height: float,
         position: list[float] | tuple[float, float, float] = (0, 0, 0),
         quaternion_xyzw: list[float] | tuple[float, float, float, float] = (0, 0, 0, 1),
-        color: str = "#b8c0c4",
+        color: str = DEFAULT_COLOR,
         opacity: float = 1,
         entity_id: str | None = None,
         parent_id: str | None = None,
@@ -327,9 +326,9 @@ def main() -> None:
         *,
         text: str,
         position: list[float] | tuple[float, float, float] = (0, 0, 0),
-        size: float = 0.1,
+        size: float = 0.08,
         color: str = "#ffffff",
-        background_color: str = "#111820",
+        background_color: str = "#1a2026",
         entity_id: str | None = None,
         parent_id: str | None = None,
     ) -> str:
@@ -375,13 +374,13 @@ def main() -> None:
         "__builtins__": safe_builtins,
         "scene": scene,
         "math": math,
-        "set_table": set_table,
-        "set_table_transform": set_table_transform,
+        "select_asset": select_asset,
         "set_layer": set_layer,
         "set_splat_visible": set_splat_visible,
-        "set_table_visible": set_table_visible,
+        "set_asset_visible": set_asset_visible,
         "add_measurement": add_measurement,
         "remove_measurement": remove_measurement,
+        "euler_degrees": euler_degrees,
         "upsert_entity": upsert_entity,
         "remove_entity": remove_entity,
         "move_entity": move_entity,
@@ -396,7 +395,7 @@ def main() -> None:
     }
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
-        exec(compile(script, "<workcell-scene-script>", "exec"), globals_dict, {})
+        exec(compile(script, "<asset-scene-script>", "exec"), globals_dict)
 
     json.dump(
         {"scene": scene, "output": output.getvalue()},

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "units": "m",
+  "up_axis": "Z",
+  "frame": "floor origin below the coffee-table center; +X across the long tabletop edge; +Y across the short tabletop edge",
+  "source_archive": "/home/colin/Downloads/Reception room.zip",
+  "source_spz": "source/reception_room.spz",
+  "source_spz_transform": {
+    "position": [0.2737607223, -0.2661040815, 0],
+    "quaternion_xyzw": [0.7064337722, -0.0308435646, -0.0308435646, 0.7064337722],
+    "scale": [0.05, 0.05, 0.05]
+  },
+  "coffee_table": {
+    "width": 1.36,
+    "depth": 0.8,
+    "height": 0.275,
+    "top_thickness": 0.06,
+    "leg_size": 0.085
+  },
+  "visual_boxes": [
+    { "name": "Tabletop", "material": "top", "pos": [0.015, 0.0175, 0.245], "size": [1.36, 0.8, 0.06] },
+    { "name": "Top groove 1", "material": "body", "pos": [-0.51, 0.0175, 0.2765], "size": [0.008, 0.76, 0.003] },
+    { "name": "Top groove 2", "material": "body", "pos": [-0.36, 0.0175, 0.2765], "size": [0.008, 0.76, 0.003] },
+    { "name": "Top groove 3", "material": "body", "pos": [-0.21, 0.0175, 0.2765], "size": [0.008, 0.76, 0.003] },
+    { "name": "Top groove 4", "material": "body", "pos": [-0.06, 0.0175, 0.2765], "size": [0.008, 0.76, 0.003] },
+    { "name": "Top groove 5", "material": "body", "pos": [0.09, 0.0175, 0.2765], "size": [0.008, 0.76, 0.003] },
+    { "name": "Top groove 6", "material": "body", "pos": [0.24, 0.0175, 0.2765], "size": [0.008, 0.76, 0.003] },
+    { "name": "Top groove 7", "material": "body", "pos": [0.39, 0.0175, 0.2765], "size": [0.008, 0.76, 0.003] },
+    { "name": "Top groove 8", "material": "body", "pos": [0.54, 0.0175, 0.2765], "size": [0.008, 0.76, 0.003] },
+    { "name": "Front apron", "material": "body", "pos": [0.015, -0.3325, 0.19], "size": [1.18, 0.05, 0.08] },
+    { "name": "Rear apron", "material": "body", "pos": [0.015, 0.3675, 0.19], "size": [1.18, 0.05, 0.08] },
+    { "name": "Left apron", "material": "body", "pos": [-0.595, 0.0175, 0.19], "size": [0.05, 0.65, 0.08] },
+    { "name": "Right apron", "material": "body", "pos": [0.625, 0.0175, 0.19], "size": [0.05, 0.65, 0.08] },
+    { "name": "Front left leg", "material": "body", "pos": [-0.397, -0.2825, 0.1075], "size": [0.085, 0.085, 0.215] },
+    { "name": "Front right leg", "material": "body", "pos": [0.477, -0.2855, 0.1075], "size": [0.085, 0.085, 0.215] },
+    { "name": "Rear left leg", "material": "body", "pos": [-0.415, 0.3055, 0.1075], "size": [0.085, 0.085, 0.215] },
+    { "name": "Rear right leg", "material": "body", "pos": [0.49, 0.3085, 0.1075], "size": [0.085, 0.085, 0.215] }
+  ],
+  "collision_boxes": [
+    { "name": "table_top", "pos": [0.015, 0.0175, 0.245], "quat": [1, 0, 0, 0], "size": [1.36, 0.8, 0.06] },
+    { "name": "front_left_leg", "pos": [-0.397, -0.2825, 0.1075], "quat": [1, 0, 0, 0], "size": [0.085, 0.085, 0.215] },
+    { "name": "front_right_leg", "pos": [0.477, -0.2855, 0.1075], "quat": [1, 0, 0, 0], "size": [0.085, 0.085, 0.215] },
+    { "name": "rear_left_leg", "pos": [-0.415, 0.3055, 0.1075], "quat": [1, 0, 0, 0], "size": [0.085, 0.085, 0.215] },
+    { "name": "rear_right_leg", "pos": [0.49, 0.3085, 0.1075], "quat": [1, 0, 0, 0], "size": [0.085, 0.085, 0.215] }
+  ]
+}

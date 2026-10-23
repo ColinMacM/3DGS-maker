@@ -21,20 +21,54 @@
         }
       },
       "manifest": "/welding_cell/manifest.json",
-      "source": {
-        "blend": "/welding_cell/welding_cell.blend"
-      },
       "simulator": {
-        "openUsd": "/welding_cell/isaac/welding_cell.usdc",
-        "mujoco": "/welding_cell/mujoco/welding_cell.xml"
+        "isaac": "/welding_cell/isaac/welding_cell.usdc",
+        "mujoco": "/welding_cell/mujoco/welding_cell.xml",
+        "unreal": "/welding_cell/browser/welding_cell.glb"
       },
       "capabilities": [
         "browser-visual",
         "gaussian-splat",
         "collision-boxes",
         "parametric-table",
-        "openusd",
-        "mujoco"
+        "isaac-sim",
+        "mujoco",
+        "unreal"
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "reception-room",
+      "version": "1.0.0",
+      "name": "Reception Room",
+      "description": "Reception-room Gaussian splat with a metric coffee-table mesh, collision proxies, and simulator-ready outputs.",
+      "units": "m",
+      "upAxis": "Z",
+      "browser": {
+        "glb": "/reception_room/browser/reception_room.glb",
+        "spz": {
+          "url": "/reception_room/source/reception_room.spz",
+          "transform": {
+            "position": [0.2737607223, -0.2661040815, 0],
+            "quaternionXyzw": [0.7064337722, -0.0308435646, -0.0308435646, 0.7064337722],
+            "scale": [0.05, 0.05, 0.05]
+          }
+        }
+      },
+      "manifest": "/reception_room/manifest.json",
+      "simulator": {
+        "isaac": "/reception_room/isaac/reception_room.usdc",
+        "mujoco": "/reception_room/mujoco/reception_room.xml",
+        "unreal": "/reception_room/browser/reception_room.glb"
+      },
+      "capabilities": [
+        "browser-visual",
+        "gaussian-splat",
+        "collision-boxes",
+        "coffee-table-mesh",
+        "isaac-sim",
+        "mujoco",
+        "unreal"
       ]
     }
   ]

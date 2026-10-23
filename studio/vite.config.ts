@@ -25,5 +25,8 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
     sourcemap: true,
+    // `bun run serve` serves repo assets/ directly (after dist/); copying them would
+    // leave stale duplicates (e.g. catalog.json) that shadow the live files.
+    copyPublicDir: false,
   },
 });

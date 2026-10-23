@@ -1,13 +1,18 @@
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { StudioDocumentValidationError, validateStudioDocument } from "./src/domain/schema";
+import { StudioDocumentValidationError } from "./src/domain/schema";
 import {
+  parsePersistedSceneState,
   SceneConflictError,
   SceneRequestError,
   SceneStore,
+  serializePersistedSceneState,
+  type PersistedSceneState,
 } from "./src/server/sceneStore";
-import type { BuildResult, BuildTarget, StudioDocument } from "./src/domain/types";
+import type { BuildResult, BuildTarget, CatalogEntry, StudioDocument } from "./src/domain/types";
 import { isBuildTarget } from "./src/api/build-contract";
+import { parseCatalog } from "./src/api/catalog";
+import type { ScenePythonResult, SceneRevisionMarker } from "./src/api/scene-control-contract";
 
 interface BunFile extends Blob {
   exists(): Promise<boolean>;
@@ -52,9 +57,11 @@ const bun = runtimeGlobal.Bun;
 
 const HOST = "127.0.0.1";
 const PORT = 4174;
+const SCENE_SERVER_INSTANCE_ID = crypto.randomUUID();
 const MAX_BUILD_REQUEST_BYTES = 4 * 1024;
 const MAX_SCENE_REQUEST_BYTES = 2 * 1024 * 1024;
 const MAX_PYTHON_REQUEST_BYTES = 128 * 1024;
+const MAX_VIEWER_STATUS_REQUEST_BYTES = 128 * 1024;
 const MAX_BUILD_OUTPUT_BYTES = 512 * 1024;
 const MAX_PYTHON_OUTPUT_BYTES = 256 * 1024;
 const MAX_PYTHON_SCRIPT_BYTES = 64 * 1024;
@@ -76,15 +83,34 @@ const KNOWN_BLENDER_PATH = "/home/colin/Downloads/blender-5.2.2-linux-x64/blende
 const STUDIO_DIRECTORY = decodeURIComponent(new URL(".", import.meta.url).pathname).replace(/\/$/, "");
 const REPOSITORY_ROOT = decodeURIComponent(new URL("../", import.meta.url).pathname).replace(/\/$/, "");
 const DIST_DIRECTORY = `${STUDIO_DIRECTORY}/dist`;
-const SCENE_STATE_PATH = `${REPOSITORY_ROOT}/.workcell-studio/scene.json`;
+/** Repo `assets/`: served after `dist/`, so model `source` URLs like `/fr10/browser/fr10_home.glb` resolve. */
+const ASSETS_DIRECTORY = `${REPOSITORY_ROOT}/assets`;
+const CATALOG_PATH = `${ASSETS_DIRECTORY}/catalog.json`;
+const SCENE_STATE_PATH = `${REPOSITORY_ROOT}/.asset-studio/scene.json`;
 const PYTHON_RUNNER_PATH = `${STUDIO_DIRECTORY}/python_scene_runner.py`;
+
+/** Package the exporters run against: the scene's `assetId`, resolved through `assets/catalog.json`. */
+interface BuildPackage {
+  readonly assetId: string;
+  /** Repo-relative, e.g. `assets/reception_room`. */
+  readonly packageDirectory: string;
+  readonly artifacts: Readonly<Record<BuildTarget, string>>;
+}
 
 interface BuildDefinition {
   readonly target: BuildTarget;
+  readonly package: BuildPackage;
   readonly executable: string;
   readonly arguments: readonly string[];
   readonly displayExecutable: string;
   readonly artifact: string;
+}
+
+class BuildScopeError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "BuildScopeError";
+  }
 }
 
 interface CapturedProcess {
@@ -99,10 +125,10 @@ interface CapturedProcess {
 let buildInProgress = false;
 let pythonInProgress = false;
 
-async function loadSceneState(): Promise<{ document?: StudioDocument; persisted: boolean }> {
+async function loadSceneState(): Promise<PersistedSceneState | undefined> {
+  let text: string;
   try {
-    const text = await readFile(SCENE_STATE_PATH, "utf8");
-    return { document: validateStudioDocument(JSON.parse(text)), persisted: true };
+    text = await readFile(SCENE_STATE_PATH, "utf8");
   } catch (error) {
     if (
       typeof error === "object"
@@ -110,17 +136,22 @@ async function loadSceneState(): Promise<{ document?: StudioDocument; persisted:
       && "code" in error
       && error.code === "ENOENT"
     ) {
-      return { persisted: false };
+      return undefined;
     }
+    throw new Error(`Unable to load ${SCENE_STATE_PATH}`, { cause: error });
+  }
+  try {
+    return parsePersistedSceneState(JSON.parse(text));
+  } catch (error) {
     throw new Error(`Unable to load ${SCENE_STATE_PATH}`, { cause: error });
   }
 }
 
-async function persistSceneState(document: StudioDocument): Promise<void> {
+async function persistSceneState(state: PersistedSceneState): Promise<void> {
   await mkdir(dirname(SCENE_STATE_PATH), { recursive: true });
   const temporaryPath = `${SCENE_STATE_PATH}.${crypto.randomUUID()}.tmp`;
   try {
-    await writeFile(temporaryPath, `${JSON.stringify(document, null, 2)}\n`, "utf8");
+    await writeFile(temporaryPath, serializePersistedSceneState(state), "utf8");
     await rename(temporaryPath, SCENE_STATE_PATH);
   } catch (error) {
     try {
@@ -132,9 +163,8 @@ async function persistSceneState(document: StudioDocument): Promise<void> {
   }
 }
 
-const initialSceneState = await loadSceneState();
 const sceneStore = new SceneStore({
-  ...initialSceneState,
+  state: await loadSceneState(),
   persist: persistSceneState,
 });
 
@@ -167,24 +197,69 @@ function commandFor(definition: BuildDefinition): string {
   return [definition.displayExecutable, ...definition.arguments].map(quoteArgument).join(" ");
 }
 
-function buildDefinition(target: BuildTarget): BuildDefinition {
+function catalogRepoPath(url: string, label: string): string {
+  const relative = url.startsWith("/") ? safeStaticPath(url) : null;
+  if (relative === null || relative.length === 0) {
+    throw new BuildScopeError(`assets/catalog.json ${label} must be a safe root-relative path, got ${JSON.stringify(url)}.`);
+  }
+  return `assets/${relative}`;
+}
+
+/**
+ * Picks the package the exporters run against. `ASSET_PACKAGE_DIR` (plus optional
+ * `ASSET_BASENAME`) overrides the selection; otherwise the scene's
+ * `assetId`/`assetVersion` must match an `assets/catalog.json` entry.
+ */
+async function resolveBuildPackage(document: Readonly<StudioDocument>): Promise<BuildPackage> {
+  const overrideDirectory = bun.env.ASSET_PACKAGE_DIR?.trim().replace(/\/+$/, "");
+  if (overrideDirectory) {
+    const basename = bun.env.ASSET_BASENAME?.trim()
+      || overrideDirectory.slice(overrideDirectory.lastIndexOf("/") + 1);
+    return {
+      assetId: document.assetId,
+      packageDirectory: overrideDirectory,
+      artifacts: {
+        isaac: `${overrideDirectory}/isaac/${basename}.usdc`,
+        mujoco: `${overrideDirectory}/mujoco/${basename}.xml`,
+        unreal: `${overrideDirectory}/browser/${basename}.glb`,
+      },
+    };
+  }
+
+  let catalog: CatalogEntry[];
+  try {
+    catalog = parseCatalog(JSON.parse(await readFile(CATALOG_PATH, "utf8")));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new BuildScopeError(`assets/catalog.json could not be read: ${detail}`, { cause: error });
+  }
+  const entry = catalog.find((asset) => (
+    asset.id === document.assetId && asset.version === document.assetVersion
+  ));
+  if (entry === undefined) {
+    const available = catalog.map((asset) => `${asset.id}@${asset.version}`).join(", ");
+    throw new BuildScopeError(
+      `The scene's asset ${document.assetId}@${document.assetVersion} has no package in assets/catalog.json (available: ${available}). Select a catalog asset before building.`,
+    );
+  }
+  return {
+    assetId: entry.id,
+    packageDirectory: dirname(catalogRepoPath(entry.manifest, "manifest")),
+    artifacts: {
+      isaac: catalogRepoPath(entry.simulator.isaac, "simulator.isaac"),
+      mujoco: catalogRepoPath(entry.simulator.mujoco, "simulator.mujoco"),
+      unreal: catalogRepoPath(entry.simulator.unreal, "simulator.unreal"),
+    },
+  };
+}
+
+function buildDefinition(target: BuildTarget, buildPackage: BuildPackage): BuildDefinition {
+  const { packageDirectory } = buildPackage;
   switch (target) {
-    case "blender":
+    case "isaac":
       return {
         target,
-        executable: bun.env.BLENDER_BIN?.trim() || KNOWN_BLENDER_PATH,
-        displayExecutable: bun.env.BLENDER_BIN?.trim() || "blender",
-        arguments: [
-          "--background",
-          "--factory-startup",
-          "--python",
-          "assets/welding_cell/build_blender_asset.py",
-        ],
-        artifact: "assets/welding_cell/welding_cell.blend",
-      };
-    case "openusd":
-      return {
-        target,
+        package: buildPackage,
         executable: "uv",
         displayExecutable: "uv",
         arguments: [
@@ -193,23 +268,28 @@ function buildDefinition(target: BuildTarget): BuildDefinition {
           "usd-core",
           "--no-project",
           "python",
-          "assets/welding_cell/export_isaac.py",
+          bun.env.ISAAC_EXPORT_SCRIPT?.trim() || `${packageDirectory}/export_isaac.py`,
         ],
-        artifact: "assets/welding_cell/isaac/welding_cell.usdc",
+        artifact: bun.env.ISAAC_ARTIFACT?.trim() || buildPackage.artifacts.isaac,
       };
     case "mujoco": {
+      const script = bun.env.MUJOCO_EXPORT_SCRIPT?.trim()
+        || `${packageDirectory}/export_mujoco.py`;
+      const artifact = bun.env.MUJOCO_ARTIFACT?.trim() || buildPackage.artifacts.mujoco;
       const configuredPython = bun.env.MUJOCO_PYTHON?.trim();
       if (configuredPython) {
         return {
           target,
+          package: buildPackage,
           executable: configuredPython,
           displayExecutable: configuredPython,
-          arguments: ["assets/welding_cell/export_mujoco.py"],
-          artifact: "assets/welding_cell/mujoco/welding_cell.xml",
+          arguments: [script],
+          artifact,
         };
       }
       return {
         target,
+        package: buildPackage,
         executable: "uv",
         displayExecutable: "uv",
         arguments: [
@@ -220,11 +300,25 @@ function buildDefinition(target: BuildTarget): BuildDefinition {
           "numpy",
           "--no-project",
           "python",
-          "assets/welding_cell/export_mujoco.py",
+          script,
         ],
-        artifact: "assets/welding_cell/mujoco/welding_cell.xml",
+        artifact,
       };
     }
+    case "unreal":
+      return {
+        target,
+        package: buildPackage,
+        executable: bun.env.BLENDER_BIN?.trim() || KNOWN_BLENDER_PATH,
+        displayExecutable: bun.env.BLENDER_BIN?.trim() || "blender",
+        arguments: [
+          "--background",
+          "--factory-startup",
+          "--python",
+          bun.env.UNREAL_EXPORT_SCRIPT?.trim() || `${packageDirectory}/export_browser.py`,
+        ],
+        artifact: bun.env.UNREAL_ARTIFACT?.trim() || buildPackage.artifacts.unreal,
+      };
   }
 }
 
@@ -266,6 +360,9 @@ function failedBuild(definition: BuildDefinition, output: string, status: number
     {
       ok: false,
       target: definition.target,
+      assetId: definition.package.assetId,
+      packageDirectory: definition.package.packageDirectory,
+      exportsSceneEntities: false,
       command: commandFor(definition),
       output,
     },
@@ -352,17 +449,23 @@ async function captureProcess(
 }
 
 async function runBuild(target: BuildTarget): Promise<Response> {
-  const definition = buildDefinition(target);
   if (buildInProgress) {
-    return failedBuild(definition, "Another build is already running. Wait for it to finish before retrying.", 409);
+    return apiError(409, "Another build is already running. Wait for it to finish before retrying.");
   }
 
   buildInProgress = true;
   try {
+    let definition: BuildDefinition;
+    try {
+      definition = buildDefinition(target, await resolveBuildPackage(sceneStore.currentDocument()));
+    } catch (error) {
+      if (error instanceof BuildScopeError) return apiError(409, error.message);
+      throw error;
+    }
     let executable = await resolveExecutable(definition.executable);
     if (
       executable === null
-      && target === "blender"
+      && target === "unreal"
       && !bun.env.BLENDER_BIN?.trim()
     ) {
       executable = bun.which("blender");
@@ -426,6 +529,9 @@ async function runBuild(target: BuildTarget): Promise<Response> {
       {
         ok: true,
         target,
+        assetId: definition.package.assetId,
+        packageDirectory: definition.package.packageDirectory,
+        exportsSceneEntities: false,
         command: commandFor(definition),
         output: captured.output,
         artifact: definition.artifact,
@@ -490,7 +596,7 @@ async function handleBuildRequest(request: Request): Promise<Response> {
     return apiError(400, "Request body may contain only the target field.");
   }
   if (!isBuildTarget(payload.target)) {
-    return apiError(400, "Unknown build target. Expected blender, openusd, or mujoco.");
+    return apiError(400, "Unknown build target. Expected isaac, mujoco, or unreal.");
   }
   return runBuild(payload.target);
 }
@@ -530,8 +636,38 @@ function sceneApiErrorResponse(error: unknown): Response {
   return apiError(500, "Scene-control request failed.");
 }
 
+/**
+ * Browser heartbeat (sent every poll and whenever render errors change). Records the
+ * viewer's render errors and returns the revision marker the browser polls for changes.
+ */
+async function handleViewerStatusRequest(request: Request): Promise<Response> {
+  if (request.method !== "POST") {
+    return apiError(405, "Method not allowed; use POST /api/scene/viewer-status.", { Allow: "POST" });
+  }
+  try {
+    const payload = await parseJsonRequest(request, MAX_VIEWER_STATUS_REQUEST_BYTES);
+    sceneStore.reportViewerStatus(payload.renderErrors);
+    const marker: SceneRevisionMarker = {
+      instanceId: SCENE_SERVER_INSTANCE_ID,
+      revision: sceneStore.currentRevision,
+    };
+    return jsonResponse(marker);
+  } catch (error) {
+    return sceneApiErrorResponse(error);
+  }
+}
+
 async function handleSceneDocumentRequest(request: Request): Promise<Response> {
-  if (request.method === "GET") return jsonResponse(sceneStore.snapshot());
+  if (request.method === "GET") {
+    const origin = request.headers.get("origin")?.toLowerCase() ?? "";
+    return jsonResponse(
+      sceneStore.snapshot(),
+      200,
+      APPROVED_ORIGINS[origin] === true
+        ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" }
+        : undefined,
+    );
+  }
   if (request.method !== "PUT") {
     return apiError(405, "Method not allowed; use GET or PUT /api/scene.", { Allow: "GET, PUT" });
   }
@@ -630,8 +766,9 @@ async function runScenePython(expectedRevision: unknown, script: unknown): Promi
     ) {
       throw new Error("Python scene runner returned an invalid result.");
     }
-    const snapshot = await sceneStore.replaceFromPython(expectedRevision, result.scene);
-    return jsonResponse({ ...snapshot, output: result.output });
+    const committed = await sceneStore.replaceFromPython(expectedRevision, result.scene);
+    const response: ScenePythonResult = { ...committed, output: result.output };
+    return jsonResponse(response);
   } finally {
     pythonInProgress = false;
   }
@@ -691,6 +828,18 @@ function safeStaticPath(pathname: string): string | null {
   return segments.filter(Boolean).join("/");
 }
 
+async function isRegularFile(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Serves `studio/dist` first, then repo `assets/` (catalog, package outputs and model
+ * GLBs such as `/fr10/browser/fr10_home.glb`), then the SPA index for HTML requests.
+ */
 async function staticResponse(request: Request, pathname: string): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return apiError(405, "Method not allowed.", { Allow: "GET, HEAD" });
@@ -699,24 +848,29 @@ async function staticResponse(request: Request, pathname: string): Promise<Respo
   const relativePath = safeStaticPath(pathname);
   if (relativePath === null) return apiError(400, "Invalid static file path.");
   const requestedPath = relativePath.length === 0 ? "index.html" : relativePath;
-  let file = bun.file(`${DIST_DIRECTORY}/${requestedPath}`);
   let servedPath = requestedPath;
+  let immutable = false;
+  let filePath: string;
 
-  if (!(await file.exists())) {
+  if (await isRegularFile(`${DIST_DIRECTORY}/${requestedPath}`)) {
+    filePath = `${DIST_DIRECTORY}/${requestedPath}`;
+    immutable = requestedPath.startsWith("assets/");
+  } else if (await isRegularFile(`${ASSETS_DIRECTORY}/${requestedPath}`)) {
+    filePath = `${ASSETS_DIRECTORY}/${requestedPath}`;
+  } else {
     const acceptsHtml = request.headers.get("accept")?.split(",").some((value) => value.trim().startsWith("text/html")) ?? false;
     if (!acceptsHtml) return apiError(404, "Static file not found.");
     servedPath = "index.html";
-    file = bun.file(`${DIST_DIRECTORY}/index.html`);
-    if (!(await file.exists())) return apiError(503, "Production bundle is unavailable; build studio/dist first.");
+    filePath = `${DIST_DIRECTORY}/index.html`;
+    if (!(await isRegularFile(filePath))) return apiError(503, "Production bundle is unavailable; build studio/dist first.");
   }
+  const file = bun.file(filePath);
 
   const headers = new Headers({
     "Content-Type": contentType(servedPath),
     "Content-Length": String(file.size),
     "X-Content-Type-Options": "nosniff",
-    "Cache-Control": servedPath.startsWith("assets/")
-      ? "public, max-age=31536000, immutable"
-      : "no-cache",
+    "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache",
   });
   headers.set("X-Frame-Options", "DENY");
   headers.set("Referrer-Policy", "no-referrer");
@@ -754,10 +908,12 @@ const server = bun.serve({
         ok: true,
         buildInProgress,
         pythonInProgress,
-        sceneRevision: sceneStore.snapshot().revision,
+        sceneRevision: sceneStore.currentRevision,
+        viewer: sceneStore.viewerStatus(),
       });
     }
     if (url.pathname === "/api/build") return handleBuildRequest(request);
+    if (url.pathname === "/api/scene/viewer-status") return handleViewerStatusRequest(request);
     if (url.pathname === "/api/scene/commands") return handleSceneCommandsRequest(request);
     if (url.pathname === "/api/scene/python") return handleScenePythonRequest(request);
     if (url.pathname === "/api/scene") return handleSceneDocumentRequest(request);
@@ -770,4 +926,4 @@ const server = bun.serve({
   },
 });
 
-console.info(`Workcell Studio server listening on http://${server.hostname}:${server.port}`);
+console.info(`Asset Studio server listening on http://${server.hostname}:${server.port}`);

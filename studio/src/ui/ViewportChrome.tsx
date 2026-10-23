@@ -3,13 +3,13 @@ import type { ToolMode, ViewportStatus } from "../domain/types";
 interface ViewportToolbarProps {
   mode: ToolMode;
   splatVisible: boolean;
-  tableVisible: boolean;
+  assetVisible: boolean;
   collisionsVisible: boolean;
   onModeChange(mode: ToolMode): void;
   onView(view: "perspective" | "top" | "front" | "right"): void;
   onFocus(): void;
   onToggleSplat(): void;
-  onToggleTable(): void;
+  onToggleAsset(): void;
   onToggleCollisions(): void;
 }
 
@@ -27,9 +27,9 @@ export function ViewportToolbar(props: ViewportToolbarProps) {
         <button type="button" onClick={props.onFocus} title="Focus viewport (F)">Focus</button>
       </div>
       <div className="viewport-toolbar__group visibility-tools" aria-label="Scene visibility">
-        <button type="button" className={`layer-toggle layer-toggle--splat${props.splatVisible ? " is-active" : ""}`} aria-pressed={props.splatVisible} onClick={props.onToggleSplat} title="Show or hide the captured SPZ"><span aria-hidden="true" />Splat</button>
-        <button type="button" className={`layer-toggle layer-toggle--table${props.tableVisible ? " is-active" : ""}`} aria-pressed={props.tableVisible} onClick={props.onToggleTable} title="Show or hide the generated table"><span aria-hidden="true" />Table</button>
-        <button type="button" className={`layer-toggle layer-toggle--collisions${props.collisionsVisible ? " is-active" : ""}`} aria-pressed={props.collisionsVisible} onClick={props.onToggleCollisions} title="Show or hide collision proxies"><span aria-hidden="true" />Collisions</button>
+        <button type="button" className={`layer-toggle layer-toggle--splat${props.splatVisible ? " is-active" : ""}`} aria-pressed={props.splatVisible} onClick={props.onToggleSplat} title="Show or hide the source splat"><span aria-hidden="true" />Splat</button>
+        <button type="button" className={`layer-toggle layer-toggle--asset${props.assetVisible ? " is-active" : ""}`} aria-pressed={props.assetVisible} onClick={props.onToggleAsset} title="Show or hide the generated 3D asset"><span aria-hidden="true" />3D asset</button>
+        <button type="button" className={`layer-toggle layer-toggle--collisions${props.collisionsVisible ? " is-active" : ""}`} aria-pressed={props.collisionsVisible} onClick={props.onToggleCollisions} title="Show or hide collision geometry"><span aria-hidden="true" />Collisions</button>
       </div>
     </div>
   );
@@ -74,6 +74,11 @@ export function StatusBar(props: StatusBarProps) {
       <span>{props.catalogCount} local asset{props.catalogCount === 1 ? "" : "s"}</span>
       <span>{props.collisionCount} collision boxes</span>
       <span>{props.referenceCount} reference{props.referenceCount === 1 ? "" : "s"}</span>
+      {props.status.renderErrors.length > 0 && (
+        <span role="alert" title={props.status.renderErrors.join("\n")}>
+          {props.status.renderErrors.length} load error{props.status.renderErrors.length === 1 ? "" : "s"}
+        </span>
+      )}
       <span className="status-bar__local">Local browser workspace</span>
     </footer>
   );

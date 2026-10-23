@@ -3,6 +3,10 @@
 An iPhone camera app for portrait JPEGs and matching camera poses. Open
 `ARPoseCapture.xcodeproj` in Xcode, select your iPhone, and run the app.
 
+> **Asset Studio** (`studio/`, the splat → 3D asset → simulator workspace) is
+> documented in [`studio/README.md`](studio/README.md). Agents should read
+> [`AGENTS.md`](AGENTS.md) first.
+
 To sign the app for your device, create `Local.xcconfig` in the repository root
 (it is git-ignored) with your Apple team and a bundle ID of your own:
 
@@ -196,21 +200,25 @@ orientation remains correct. Near-singular angle extraction preserves small
 tilts instead of rounding them to exactly 90 degrees. Quaternions q and -q
 represent the same rotation; exported quaternions use qw >= 0.
 
-## Workcell Studio
+## Asset Studio
 
-`studio/` is a local browser editor for the reconstructed welding cell in
-`assets/welding_cell`. Its catalog displays the captured workcell as a compressed,
-view-independent SPZ and keeps the aligned semantic GLB as a fallback. The
-captured table is shown by default; the generated parametric table starts hidden
-to avoid drawing a second table over the scan. Studio provides a metric, Z-up
-Three.js work surface for local scan/splat references, measurements, collision review, a revisioned local
-scene-control API, constrained Python scene scripts, and fixed-target
-Blender/OpenUSD/MuJoCo builds. Studio uses a balanced multi-axis viewer light rig; generated simulator assets contain no scene lights.
+`studio/` is a local browser workspace for a generic asset pipeline:
 
-See [`studio/README.md`](studio/README.md) for setup, API and Python examples,
-supported reference formats, coordinate conventions, and the loopback service
-boundary. The environment assets do not include the robot, URDF, articulation,
-controllers, or hardware access.
+```text
+Gaussian splat → 3D asset → Isaac Sim / MuJoCo / Unreal Engine
+```
+
+Catalog packages keep the source splat, generated GLB, collision geometry, and
+target artifacts aligned in metric Z-up coordinates. The bundled
+`assets/welding_cell` and `assets/reception_room` directories are reference
+packages, not product-specific editor constraints. Studio also provides local
+source imports, measurements, semantic scene entities, a revisioned loopback
+API, a stdio Scene MCP for live object function calls, constrained Python scene
+scripts, and configurable fixed-target exporters.
+
+See [`studio/README.md`](studio/README.md) for setup, the package contract,
+Scene MCP configuration, scene-control API, Python helpers, coordinate
+conventions, and exporter profile configuration.
 
 ## Verification
 

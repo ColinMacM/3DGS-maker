@@ -11,21 +11,20 @@ interface BuildPanelProps {
 }
 
 const targets: Array<{ id: BuildTarget; title: string; artifact: string; detail: string }> = [
-  { id: "blender", title: "Blender", artifact: ".blend", detail: "Rebuild the clean environment asset." },
-  { id: "openusd", title: "OpenUSD", artifact: ".usdc", detail: "Generate the Isaac-compatible stage." },
-  { id: "mujoco", title: "MuJoCo", artifact: ".xml", detail: "Generate and smoke-test the MJCF scene." },
+  { id: "isaac", title: "Isaac Sim", artifact: ".usdc", detail: "Build a metric OpenUSD stage with collision data." },
+  { id: "mujoco", title: "MuJoCo", artifact: ".xml", detail: "Build and smoke-test the MJCF asset." },
+  { id: "unreal", title: "Unreal Engine", artifact: ".glb", detail: "Build the mesh package for Unreal import." },
 ];
 
 export function BuildPanel(props: BuildPanelProps) {
   return (
-    <aside className={`build-panel${props.open ? " is-open" : ""}`} aria-label="Build environment">
-      <div className="panel-titlebar"><div><h2>Build environment</h2><p>Local whitelisted exporters</p></div><button className="drawer-close" type="button" onClick={props.onClose} aria-label="Close build panel">×</button></div>
+    <aside className={`build-panel${props.open ? " is-open" : ""}`} aria-label="Export asset">
+      <div className="panel-titlebar"><div><h2>Export asset</h2><p>Three simulation targets</p></div><button className="drawer-close" type="button" onClick={props.onClose} aria-label="Close export panel">×</button></div>
       <div className="build-panel__body">
         <div className="validation-summary">
           <span className="validation-icon" aria-hidden="true">✓</span>
-          <div><strong>Scene recipe ready</strong><p>Metric coordinates and Z-up frame are preserved.</p></div>
+          <div><strong>Package export</strong><p>Exports the selected catalog package from its manifest. Scene objects and authored colliders are not exported.</p></div>
         </div>
-        <div className="boundary-warning"><strong>Environment only</strong><p>Add the robot and controllers in the simulator project. Builds never contact hardware.</p></div>
         <div className="build-targets">
           {targets.map((target) => {
             const running = props.activeTarget === target.id;
@@ -40,6 +39,7 @@ export function BuildPanel(props: BuildPanelProps) {
         {props.result && (
           <div className={`build-result${props.result.ok ? " build-result--success" : " build-result--error"}`} aria-live="polite">
             <strong>{props.result.ok ? `${props.result.target} build complete` : `${props.result.target} build failed`}</strong>
+            <p>Package <code>{props.result.assetId}</code> from <code>{props.result.packageDirectory}</code> (manifest only; scene objects not exported).</p>
             {props.result.artifact && <p>Artifact: <code>{props.result.artifact}</code></p>}
             <details><summary>Build output</summary><pre>{props.result.output || "The exporter returned no output."}</pre></details>
           </div>

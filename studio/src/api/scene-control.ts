@@ -1,11 +1,13 @@
 import {
+  parseSceneCommandResult,
+  parseSceneRevisionMarker,
   parseSceneSnapshot,
   withoutRuntimeReferenceUrls,
-  type ScenePythonResult,
+  type SceneCommandResult,
+  type SceneRevisionMarker,
   type SceneSnapshot,
 } from "./scene-control-contract";
 import type { StudioDocument } from "../domain/types";
-import type { StudioCommand } from "../state/commands";
 
 export class SceneControlApiError extends Error {
   readonly status: number;
@@ -36,11 +38,11 @@ function errorMessage(payload: unknown, status: number): string {
   return `Scene-control request failed with HTTP ${status}`;
 }
 
-async function checkedSnapshot(response: Response): Promise<SceneSnapshot> {
+async function checkedPayload<T>(response: Response, parse: (payload: unknown) => T): Promise<T> {
   const payload = await responseJson(response);
   if (!response.ok) throw new SceneControlApiError(errorMessage(payload, response.status), response.status);
   try {
-    return parseSceneSnapshot(payload);
+    return parse(payload);
   } catch (error) {
     throw new SceneControlApiError(
       error instanceof Error ? error.message : "Scene-control response is invalid",
@@ -50,18 +52,34 @@ async function checkedSnapshot(response: Response): Promise<SceneSnapshot> {
 }
 
 export async function fetchControlledScene(signal?: AbortSignal): Promise<SceneSnapshot> {
-  return checkedSnapshot(await fetch("/api/scene", {
+  return checkedPayload(await fetch("/api/scene", {
     headers: { Accept: "application/json" },
     signal,
-  }));
+  }), parseSceneSnapshot);
+}
+
+/**
+ * Browser heartbeat: reports the viewport's current render errors and returns the
+ * server's revision marker, which the poll loop uses to detect new revisions.
+ */
+export async function reportControlledViewerStatus(
+  renderErrors: readonly string[],
+  signal?: AbortSignal,
+): Promise<SceneRevisionMarker> {
+  return checkedPayload(await fetch("/api/scene/viewer-status", {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json" },
+    body: JSON.stringify({ renderErrors }),
+    signal,
+  }), parseSceneRevisionMarker);
 }
 
 export async function replaceControlledScene(
   expectedRevision: number,
   document: StudioDocument,
   signal?: AbortSignal,
-): Promise<SceneSnapshot> {
-  return checkedSnapshot(await fetch("/api/scene", {
+): Promise<SceneCommandResult> {
+  return checkedPayload(await fetch("/api/scene", {
     method: "PUT",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -69,38 +87,5 @@ export async function replaceControlledScene(
       document: withoutRuntimeReferenceUrls(document),
     }),
     signal,
-  }));
-}
-
-export async function applyControlledSceneCommands(
-  expectedRevision: number,
-  commands: readonly StudioCommand[],
-  signal?: AbortSignal,
-): Promise<SceneSnapshot> {
-  return checkedSnapshot(await fetch("/api/scene/commands", {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ expectedRevision, commands }),
-    signal,
-  }));
-}
-
-export async function runControlledScenePython(
-  expectedRevision: number,
-  script: string,
-  signal?: AbortSignal,
-): Promise<ScenePythonResult> {
-  const response = await fetch("/api/scene/python", {
-    method: "POST",
-    headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify({ expectedRevision, script }),
-    signal,
-  });
-  const payload = await responseJson(response);
-  if (!response.ok) throw new SceneControlApiError(errorMessage(payload, response.status), response.status);
-  const snapshot = parseSceneSnapshot(payload);
-  if (typeof payload !== "object" || payload === null || !("output" in payload) || typeof payload.output !== "string") {
-    throw new SceneControlApiError("Python scene response is missing output", response.status);
-  }
-  return { ...snapshot, output: payload.output };
+  }), parseSceneCommandResult);
 }

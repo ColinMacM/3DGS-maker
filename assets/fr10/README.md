@@ -21,4 +21,4 @@ Regenerate it from the repository root:
   --python assets/fr10/export_browser.py
 ```
 
-The Workcell Studio scene places the browser model on the existing robot mount plate at `[0.1, 0.5, 0.66675]` metres. The GLB is visual-only; MuJoCo and Isaac Sim should continue to consume the URDF and simulator-specific physics configuration rather than infer articulation from the GLB.
+To show it in Asset Studio, add it as a `model` entity with `source: "/fr10/browser/fr10_home.glb"` (URLs are rooted at repo `assets/`); the welding-cell robot mount plate is at `[0.1, 0.5, 0.66675]` metres. The GLB is exported Z-up, as Studio model entities require. The GLB is visual-only; MuJoCo and Isaac Sim should continue to consume the URDF and simulator-specific physics configuration rather than infer articulation from the GLB.

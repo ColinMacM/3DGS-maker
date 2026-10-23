@@ -1,6 +1,6 @@
 import type { ReferenceLayer } from "../domain/types";
 
-const DATABASE_NAME = "workcell-studio";
+const DATABASE_NAME = "asset-studio";
 const DATABASE_VERSION = 1;
 const REFERENCE_BLOB_STORE = "referenceBlobs";
 

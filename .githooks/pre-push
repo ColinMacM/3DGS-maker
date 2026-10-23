@@ -1,0 +1,9 @@
+#!/bin/sh
+# Blocks `git push` when Asset Studio tests or the typecheck/build fail.
+# Enable once per clone: git config core.hooksPath .githooks
+set -e
+cd "$(git rev-parse --show-toplevel)/studio"
+echo "pre-push: bun run test"
+bun run test
+echo "pre-push: bun run build"
+bun run build

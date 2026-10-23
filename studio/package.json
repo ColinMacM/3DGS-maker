@@ -1,5 +1,5 @@
 {
-  "name": "workcell-studio",
+  "name": "asset-studio",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,13 +10,17 @@
     "build": "bun node_modules/typescript/lib/tsc.js --noEmit && bun node_modules/vite/bin/vite.js build",
     "test": "bun node_modules/vitest/vitest.mjs run",
     "serve": "bun run server.ts",
-    "scene:python": "python3 run_scene_script.py"
+    "scene:python": "python3 run_scene_script.py",
+    "mcp:scene": "bun run src/mcp/server.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@sparkjsdev/spark": "^2.4.0",
+    "ajv": "^8.20.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "three": "^0.186.1"
+    "three": "^0.186.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@fontsource/ibm-plex-mono": "latest",

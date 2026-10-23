@@ -1,3 +1,5 @@
+import type { VoxelOccupancy } from "./voxels";
+
 export type Vec3 = readonly [number, number, number];
 export type QuaternionXyzw = readonly [number, number, number, number];
 
@@ -7,7 +9,7 @@ export interface Transform {
   scale: Vec3;
 }
 
-export interface TableParameters {
+export interface PerforatedTableParameters {
   width: number;
   length: number;
   topThickness: number;
@@ -20,19 +22,45 @@ export interface TableParameters {
   legSize: number;
 }
 
+
 export interface LayerVisibility {
   catalogVisuals: boolean;
-  parametricModel: boolean;
+  assetVisuals: boolean;
   collisions: boolean;
   reference: boolean;
   measurements: boolean;
 }
 
-export type ViewportSettings = Record<string, never>;
+export type ViewPreset = "perspective" | "top" | "front" | "right";
+
+export interface ViewportSettings {
+  preset: ViewPreset;
+  /**
+   * Reframe nonce. Every `viewport.frame` command increments it and the viewport
+   * reframes the visible scene whenever the value changes. Absent means 0.
+   */
+  frameRequest?: number;
+}
+
+export type BoxTextureFace =
+  | "x-positive"
+  | "x-negative"
+  | "y-positive"
+  | "y-negative"
+  | "z-positive"
+  | "z-negative";
+
+export interface SceneTexture {
+  dataUrl: string;
+  face: BoxTextureFace;
+  width: number;
+  height: number;
+}
 
 export interface SceneMaterial {
   color: string;
   opacity: number;
+  texture?: SceneTexture;
 }
 
 export type SceneEntityKind =
@@ -41,6 +69,7 @@ export type SceneEntityKind =
   | "cylinder"
   | "capsule"
   | "model"
+  | "procedural"
   | "group"
   | "label";
 
@@ -84,6 +113,12 @@ export interface ModelSceneEntity extends SceneEntityBase {
   source: string;
 }
 
+export interface ProceduralSceneEntity extends SceneEntityBase {
+  kind: "procedural";
+  generator: "perforated-table";
+  parameters: PerforatedTableParameters;
+}
+
 
 export interface GroupSceneEntity extends SceneEntityBase {
   kind: "group";
@@ -103,6 +138,7 @@ export type SceneEntity =
   | CylinderSceneEntity
   | CapsuleSceneEntity
   | ModelSceneEntity
+  | ProceduralSceneEntity
   | GroupSceneEntity
   | LabelSceneEntity;
 
@@ -111,6 +147,22 @@ export interface Measurement {
   label: string;
   start: Vec3;
   end: Vec3;
+}
+
+/**
+ * Transient viewport overlay (user-facing only; agents never see the viewport).
+ * Without `voxels` it renders as a wireframe box; with `voxels` it renders the
+ * exposed voxel edges of that occupancy grid instead of the box outline.
+ */
+export interface SceneBounds {
+  id: string;
+  label: string;
+  color?: string;
+  position: Vec3;
+  quaternionXyzw: QuaternionXyzw;
+  size: Vec3;
+  voxels?: VoxelOccupancy;
+  expiresAt?: string;
 }
 
 export type ReferenceKind = "splat" | "mesh" | "point-cloud";
@@ -125,19 +177,39 @@ export interface ReferenceLayer {
   visible: boolean;
 }
 
+export interface ExplicitSceneCollisionBox {
+  id: string;
+  name: string;
+  kind: "box";
+  position: Vec3;
+  quaternionXyzw: QuaternionXyzw;
+  size: Vec3;
+}
+
+export interface LinkedSceneCollisionBox {
+  id: string;
+  name: string;
+  kind: "entity-box";
+  entityId: string;
+}
+
+export type SceneCollisionBox =
+  | ExplicitSceneCollisionBox
+  | LinkedSceneCollisionBox;
+
 export interface StudioDocument {
-  schemaVersion: 2;
+  schemaVersion: 3;
   id: string;
   name: string;
   units: "m";
   upAxis: "Z";
   assetId: string;
   assetVersion: string;
-  table: TableParameters;
-  tableTransform: Transform;
+  entities: SceneEntity[];
+  collisions: SceneCollisionBox[];
+  bounds: SceneBounds[];
   layers: LayerVisibility;
   viewport: ViewportSettings;
-  entities: SceneEntity[];
   references: ReferenceLayer[];
   measurements: Measurement[];
   updatedAt: string;
@@ -167,17 +239,21 @@ export interface CatalogEntry {
     };
   };
   manifest: string;
-  source: { blend: string };
-  simulator: { openUsd: string; mujoco: string };
+  simulator: { isaac: string; mujoco: string; unreal: string };
   capabilities: readonly string[];
 }
 
 export type ToolMode = "select" | "translate" | "rotate" | "measure";
-export type BuildTarget = "blender" | "openusd" | "mujoco";
+export type BuildTarget = "isaac" | "mujoco" | "unreal";
 
 export interface BuildResult {
   ok: boolean;
   target: BuildTarget;
+  /** Catalog asset id whose package was exported (`document.assetId`). */
+  assetId: string;
+  packageDirectory: string;
+  /** Exporters read only the package manifest; scene entities/colliders are never exported. */
+  exportsSceneEntities: false;
   command: string;
   output: string;
   artifact?: string;
@@ -188,4 +264,9 @@ export interface ViewportStatus {
   cursor: Vec3 | null;
   selectedId: string | null;
   message: string;
+  /**
+   * Current load failures (catalog splat/GLB, entity model GLBs, references), each
+   * `"<what>: <message>"`. An entry disappears once its failure resolves.
+   */
+  renderErrors: readonly string[];
 }
