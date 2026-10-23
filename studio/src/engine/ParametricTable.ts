@@ -3,14 +3,10 @@ import {
   CylinderGeometry,
   ExtrudeGeometry,
   Group,
-  InstancedMesh,
-  Matrix4,
   Mesh,
   MeshStandardMaterial,
   Path,
-  Quaternion,
   Shape,
-  Vector3,
 } from "three";
 
 import type { TableParameters } from "../domain/types";
@@ -90,69 +86,6 @@ function makePerforatedTop(
   return mesh;
 }
 
-function addSideHolePattern(
-  group: Group,
-  parameters: TableParameters,
-  material: MeshStandardMaterial,
-): void {
-  const width = positive(parameters.width);
-  const length = positive(parameters.length);
-  const thickness = positive(parameters.topThickness);
-  const radius = positive(parameters.holeDiameter) / 2;
-  const pitch = positive(parameters.holePitch);
-  const edge = Math.max(radius, parameters.edgeToHole);
-  const columns = Math.min(100, Math.max(0, Math.floor(parameters.columns)));
-  const rows = Math.min(100, Math.max(0, Math.floor(parameters.rows)));
-  const maximumHoleCount = 2 * (columns + rows);
-  const alongY = new Quaternion();
-  const alongX = new Quaternion().setFromAxisAngle(
-    new Vector3(0, 0, 1),
-    Math.PI / 2,
-  );
-  const z = parameters.topHeight - thickness / 2;
-  if (maximumHoleCount === 0) return;
-
-  const geometry = new CylinderGeometry(radius, radius, 0.0015, 16);
-  const holes = new InstancedMesh(geometry, material, maximumHoleCount);
-  const matrix = new Matrix4();
-  const position = new Vector3();
-  const scale = new Vector3(1, 1, 1);
-  let holeIndex = 0;
-
-  for (let column = 0; column < columns; column += 1) {
-    const x = -width / 2 + edge + column * pitch;
-    if (x - radius < -width / 2 || x + radius > width / 2) continue;
-    position.set(x, -length / 2 - 0.0003, z);
-    matrix.compose(position, alongY, scale);
-    holes.setMatrixAt(holeIndex, matrix);
-    holeIndex += 1;
-
-    position.set(x, length / 2 + 0.0003, z);
-    matrix.compose(position, alongY, scale);
-    holes.setMatrixAt(holeIndex, matrix);
-    holeIndex += 1;
-  }
-
-  for (let row = 0; row < rows; row += 1) {
-    const y = -length / 2 + edge + row * pitch;
-    if (y - radius < -length / 2 || y + radius > length / 2) continue;
-    position.set(-width / 2 - 0.0003, y, z);
-    matrix.compose(position, alongX, scale);
-    holes.setMatrixAt(holeIndex, matrix);
-    holeIndex += 1;
-
-    position.set(width / 2 + 0.0003, y, z);
-    matrix.compose(position, alongX, scale);
-    holes.setMatrixAt(holeIndex, matrix);
-    holeIndex += 1;
-  }
-
-  holes.count = holeIndex;
-  holes.instanceMatrix.needsUpdate = true;
-  holes.name = "Table edge holes";
-  group.add(holes);
-}
-
 /** Build a Z-up table whose topHeight is the finished top-surface elevation. */
 export function createParametricTable(parameters: TableParameters): Group {
   const group = new Group();
@@ -168,11 +101,6 @@ export function createParametricTable(parameters: TableParameters): Group {
     metalness: 0.5,
     roughness: 0.5,
   });
-  const holeInterior = new MeshStandardMaterial({
-    color: 0x151b1e,
-    metalness: 0.18,
-    roughness: 0.82,
-  });
   const frame = new MeshStandardMaterial({
     color: 0x36434a,
     metalness: 0.35,
@@ -185,7 +113,6 @@ export function createParametricTable(parameters: TableParameters): Group {
   });
 
   group.add(makePerforatedTop(parameters, steel, edges));
-  addSideHolePattern(group, parameters, holeInterior);
 
   const width = positive(parameters.width);
   const length = positive(parameters.length);
@@ -196,93 +123,72 @@ export function createParametricTable(parameters: TableParameters): Group {
     length / 3,
   );
   const underside = Math.max(0, parameters.topHeight - thickness);
-
-  // Measurements below come from the reconstructed table mesh aligned to the
-  // capture. The top is a 4-inch box on a mobile square-tube frame.
-  const legCenterX = Math.max(0, width / 2 - 0.04);
-  const legCenterY = Math.max(0, length / 2 - 0.06);
-  const wheelRadius = 0.045;
-  const wheelWidth = 0.036;
-  const casterMountSize: readonly [number, number, number] = [
-    0.105,
-    0.125,
-    0.11,
-  ];
-  const casterMountZ = 0.1127;
-  const legBottom = Math.min(0.1477, Math.max(0, underside - MIN_SIZE));
-  const legHeight = Math.max(MIN_SIZE, underside - legBottom);
+  const legHeight = Math.max(MIN_SIZE, underside);
+  const insetX = Math.max(0, width / 2 - legSize);
+  const insetY = Math.max(0, length / 2 - legSize);
   const legGeometry = new BoxGeometry(legSize, legSize, legHeight);
-  const casterMountGeometry = new BoxGeometry(...casterMountSize);
-  const wheelGeometry = new CylinderGeometry(
-    wheelRadius,
-    wheelRadius,
-    wheelWidth,
-    24,
+  const footGeometry = new CylinderGeometry(
+    legSize * 0.64,
+    legSize * 0.72,
+    0.012,
+    20,
   );
 
-  for (const x of [-legCenterX, legCenterX]) {
-    for (const y of [-legCenterY, legCenterY]) {
+  for (const x of [-insetX, insetX]) {
+    for (const y of [-insetY, insetY]) {
       addBox(
         group,
         legGeometry,
-        [x, y, legBottom + legHeight / 2],
-        frame,
-      );
-      addBox(
-        group,
-        casterMountGeometry,
-        [x, y, casterMountZ],
+        [x, y, legHeight / 2],
         frame,
       );
 
-      const wheel = new Mesh(wheelGeometry, feet);
-      // CylinderGeometry is Y-axis aligned; the captured caster axles run X.
-      wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(x, y, wheelRadius);
-      group.add(wheel);
+      const foot = new Mesh(footGeometry, feet);
+      // CylinderGeometry is Y-axis aligned; orient it to canonical Z.
+      foot.rotation.x = Math.PI / 2;
+      foot.position.set(x, y, 0.006);
+      group.add(foot);
     }
   }
 
-  const railSize = 0.052;
-  const railZ = Math.min(
-    0.1927,
-    Math.max(railSize / 2, underside - railSize / 2),
-  );
-  const railLength = Math.max(MIN_SIZE, length - 0.12);
-  const railWidth = Math.max(MIN_SIZE, width - 0.08);
-  const lengthRailGeometry = new BoxGeometry(
-    railSize,
+  const apronDepth = Math.min(0.08, Math.max(0.025, legSize));
+  const apronThickness = Math.min(0.035, legSize * 0.45);
+  const apronZ = Math.max(apronDepth / 2, underside - apronDepth / 2);
+  const railLength = Math.max(MIN_SIZE, length - legSize * 2);
+  const railWidth = Math.max(MIN_SIZE, width - legSize * 2);
+  const lengthApronGeometry = new BoxGeometry(
+    apronThickness,
     railLength,
-    railSize,
+    apronDepth,
   );
-  const widthRailGeometry = new BoxGeometry(
+  const widthApronGeometry = new BoxGeometry(
     railWidth,
-    railSize,
-    railSize,
+    apronThickness,
+    apronDepth,
   );
 
   addBox(
     group,
-    lengthRailGeometry,
-    [-legCenterX, 0, railZ],
+    lengthApronGeometry,
+    [-insetX, 0, apronZ],
     frame,
   );
   addBox(
     group,
-    lengthRailGeometry,
-    [legCenterX, 0, railZ],
+    lengthApronGeometry,
+    [insetX, 0, apronZ],
     frame,
   );
   addBox(
     group,
-    widthRailGeometry,
-    [0, -legCenterY, railZ],
+    widthApronGeometry,
+    [0, -insetY, apronZ],
     frame,
   );
   addBox(
     group,
-    widthRailGeometry,
-    [0, legCenterY, railZ],
+    widthApronGeometry,
+    [0, insetY, apronZ],
     frame,
   );
 
