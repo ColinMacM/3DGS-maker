@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run a Workcell Studio scene script through the loopback scene-control API."""
+"""Run an Asset Studio scene script through the loopback scene-control API."""
 from __future__ import annotations
 
 import argparse
@@ -33,7 +33,7 @@ def request_json(url: str, *, method: str = "GET", payload: object | None = None
         raise RuntimeError(f"scene API returned HTTP {error.code}: {detail}") from error
     except URLError as error:
         raise RuntimeError(
-            "Workcell Studio is unavailable. Start it with `bun run serve` or `bun run dev:server`."
+            "Asset Studio is unavailable. Start it with `bun run serve` or `bun run dev:server`."
         ) from error
 
 

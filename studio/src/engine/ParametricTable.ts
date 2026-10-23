@@ -9,7 +9,7 @@ import {
   Shape,
 } from "three";
 
-import type { TableParameters } from "../domain/types";
+import type { PerforatedTableParameters } from "../domain/types";
 
 const MIN_SIZE = 0.0001;
 const MAX_HOLES = 4096;
@@ -30,7 +30,7 @@ function addBox(
 }
 
 function makePerforatedTop(
-  parameters: TableParameters,
+  parameters: PerforatedTableParameters,
   topMaterial: MeshStandardMaterial,
   edgeMaterial: MeshStandardMaterial,
 ): Mesh {
@@ -87,9 +87,9 @@ function makePerforatedTop(
 }
 
 /** Build a Z-up table whose topHeight is the finished top-surface elevation. */
-export function createParametricTable(parameters: TableParameters): Group {
+export function createParametricTable(parameters: PerforatedTableParameters): Group {
   const group = new Group();
-  group.name = "Parametric welding table";
+  group.name = "Perforated table";
 
   const steel = new MeshStandardMaterial({
     color: 0x5e6b72,

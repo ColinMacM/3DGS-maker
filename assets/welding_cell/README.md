@@ -13,11 +13,10 @@ Metric, Z-up assets reconstructed against the captured workcell Gaussian splat. 
 | Shared dimensions and collision proxies | `manifest.json` |
 | Interchange visual meshes | `meshes/*.obj` |
 | Browser catalog model | `browser/welding_cell.glb` |
-| Browser catalog metadata | `studio.asset.json` |
 
 The exported frame places the floor at `z = 0` and the table top at `z = 0.6477 m`. `+X` crosses the 30-inch table width; `+Y` follows the 54-inch table length.
 
-The SPZ is the 1,338,528-Gaussian refined capture, compressed as legacy-gzip SPZ v3 at SH degree 0. Its transform into the canonical workcell frame is recorded in `manifest.json`, `studio.asset.json`, and the root catalog. Workcell Studio displays this scan and loads the aligned GLB only if the SPZ fails; its generated parametric table starts hidden because the scan already contains the captured table. The OBJ/GLB/Blender/simulator geometry is the semantic approximation aligned to that capture; the SPZ itself is visual reference data, not collision geometry.
+The SPZ is the 1,338,528-Gaussian refined capture, compressed as legacy-gzip SPZ v3 at SH degree 0. Its transform into the canonical workcell frame is recorded in `manifest.json` and in `assets/catalog.json`; the catalog entry is what Asset Studio reads. Asset Studio loads both the SPZ (the **Splat** layer) and the aligned GLB (the **3D asset** layer); the packaged GLB is shown only while the scene has no visible authored entities. The viewer applies an implicit Rx(180°) to the SPZ before `browser.spz.transform`. The OBJ/GLB/Blender/simulator geometry is the semantic approximation aligned to that capture; the SPZ itself is visual reference data, not collision geometry.
 
 Table dimensions:
 
@@ -63,6 +62,6 @@ uv run --with usd-core --no-project \
 python assets/welding_cell/export_mujoco.py
 ```
 
-`export_from_blender.py` writes `source_spz_transform` into the manifest. If the authored table alignment changes, copy that transform into `assets/catalog.json` and `studio.asset.json` before rebuilding the browser bundle.
+`export_from_blender.py` writes `source_spz_transform` into the manifest. If the authored table alignment changes, copy that transform into `assets/catalog.json` (the only browser-side copy) before rebuilding the browser bundle.
 
 `export_mujoco.py` requires the `mujoco` Python package. Both simulator files are standalone environment assets intended to be composed with a robot separately.

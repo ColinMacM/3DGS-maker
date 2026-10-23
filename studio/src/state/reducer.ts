@@ -2,16 +2,6 @@ import { createDefaultStudioDocument } from "../domain/defaultDocument";
 import { validateStudioDocument } from "../domain/schema";
 import type { StudioDocument } from "../domain/types";
 import type { StudioCommand } from "./commands";
-
-function sameTransform(
-  left: StudioDocument["tableTransform"],
-  right: StudioDocument["tableTransform"],
-): boolean {
-  return left.position.every((value, index) => value === right.position[index])
-    && left.quaternionXyzw.every((value, index) => value === right.quaternionXyzw[index])
-    && left.scale.every((value, index) => value === right.scale[index]);
-}
-
 /**
  * Applies one command without mutating the input. The caller supplies the edit
  * timestamp so the reducer remains deterministic and safe under React replay.
@@ -24,20 +14,32 @@ export function reduceStudioDocument(
   let next: StudioDocument;
 
   switch (command.type) {
-    case "table.parameters.update": {
-      const entries = Object.entries(command.patch) as [keyof StudioDocument["table"], number][];
-      if (entries.length === 0 || entries.every(([key, value]) => document.table[key] === value)) return document;
-      next = { ...document, table: { ...document.table, ...command.patch }, updatedAt };
-      break;
-    }
-    case "table.transform.update":
-      if (sameTransform(document.tableTransform, command.transform)) return document;
+    case "asset.select":
+      if (
+        document.assetId === command.assetId
+        && document.assetVersion === command.assetVersion
+      ) return document;
       next = {
         ...document,
-        tableTransform: {
-          position: [...command.transform.position],
-          quaternionXyzw: [...command.transform.quaternionXyzw],
-          scale: [...command.transform.scale],
+        assetId: command.assetId,
+        assetVersion: command.assetVersion,
+        updatedAt,
+      };
+      break;
+    case "viewport.preset.set":
+      if (document.viewport.preset === command.preset) return document;
+      next = {
+        ...document,
+        viewport: { ...document.viewport, preset: command.preset },
+        updatedAt,
+      };
+      break;
+    case "viewport.frame":
+      next = {
+        ...document,
+        viewport: {
+          ...document.viewport,
+          frameRequest: (document.viewport.frameRequest ?? 0) + 1,
         },
         updatedAt,
       };
@@ -73,9 +75,31 @@ export function reduceStudioDocument(
       }
       const entities = document.entities.filter(({ id }) => !removedIds.has(id));
       if (entities.length === document.entities.length) return document;
-      next = { ...document, entities, updatedAt };
+      const collisions = document.collisions.filter((collision) => (
+        collision.kind !== "entity-box" || !removedIds.has(collision.entityId)
+      ));
+      next = { ...document, entities, collisions, updatedAt };
       break;
     }
+    case "collision.upsert": {
+      const index = document.collisions.findIndex(({ id }) => id === command.collision.id);
+      const collisions = index < 0
+        ? [...document.collisions, command.collision]
+        : document.collisions.map((collision, collisionIndex) => (
+            collisionIndex === index ? command.collision : collision
+          ));
+      next = { ...document, collisions, updatedAt };
+      break;
+    }
+    case "collision.remove": {
+      const collisions = document.collisions.filter(({ id }) => id !== command.id);
+      if (collisions.length === document.collisions.length) return document;
+      next = { ...document, collisions, updatedAt };
+      break;
+    }
+    case "bounds.set":
+      next = { ...document, bounds: command.bounds, updatedAt };
+      break;
     case "reference.add":
       next = {
         ...document,

@@ -54,7 +54,6 @@ function catalogEntry(value: unknown, index: number): CatalogEntry {
     throw new Error(`Catalog asset ${index + 1} must use schema version 1, metres, and Z-up.`);
   }
   const browser = record(item.browser, `Catalog asset ${index + 1} browser`);
-  const source = record(item.source, `Catalog asset ${index + 1} source`);
   const spz = browser.spz === undefined
     ? undefined
     : record(browser.spz, `Catalog asset ${index + 1} browser SPZ`);
@@ -81,10 +80,10 @@ function catalogEntry(value: unknown, index: number): CatalogEntry {
       } : {}),
     },
     manifest: text(item.manifest, `Catalog asset ${index + 1} manifest`),
-    source: { blend: text(source.blend, `Catalog asset ${index + 1} Blender source`) },
     simulator: {
-      openUsd: text(simulator.openUsd, `Catalog asset ${index + 1} OpenUSD output`),
+      isaac: text(simulator.isaac, `Catalog asset ${index + 1} Isaac Sim output`),
       mujoco: text(simulator.mujoco, `Catalog asset ${index + 1} MuJoCo output`),
+      unreal: text(simulator.unreal, `Catalog asset ${index + 1} Unreal output`),
     },
     capabilities: [...item.capabilities] as string[],
   };
@@ -108,12 +107,16 @@ async function fetchJson(url: string, label: string, signal?: AbortSignal): Prom
   }
 }
 
-export async function loadCatalog(signal?: AbortSignal): Promise<CatalogEntry[]> {
-  const value = record(await fetchJson("/catalog.json", "The asset catalog", signal), "The asset catalog");
-  if (value.schemaVersion !== 1 || !Array.isArray(value.assets)) {
+export function parseCatalog(value: unknown): CatalogEntry[] {
+  const catalog = record(value, "The asset catalog");
+  if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.assets)) {
     throw new Error("The asset catalog must use schema version 1 and contain an assets array.");
   }
-  return (value as unknown as CatalogIndex).assets.map(catalogEntry);
+  return (catalog as unknown as CatalogIndex).assets.map(catalogEntry);
+}
+
+export async function loadCatalog(signal?: AbortSignal): Promise<CatalogEntry[]> {
+  return parseCatalog(await fetchJson("/catalog.json", "The asset catalog", signal));
 }
 
 export async function loadCollisionManifest(url: string, signal?: AbortSignal): Promise<{ collision_boxes: CollisionBox[] }> {

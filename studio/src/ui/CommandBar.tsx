@@ -31,13 +31,13 @@ export function CommandBar(props: CommandBarProps) {
   return (
     <header className="command-bar">
       <button className="mobile-panel-button" type="button" aria-expanded={props.leftOpen} onClick={props.onToggleLeft}>
-        Catalog and scene
+        Assets and scene
       </button>
       <div className="project-identity">
-        <span className="project-mark" aria-hidden="true">W</span>
+        <span className="project-mark" aria-hidden="true">A</span>
         <div>
           <strong>{props.projectName}</strong>
-          <span><i className="status-dot" /> Saved locally</span>
+          <span><i className="status-dot" /> Asset Studio · saved locally</span>
         </div>
       </div>
 
@@ -65,14 +65,14 @@ export function CommandBar(props: CommandBarProps) {
         <details className="file-menu">
           <summary>File</summary>
           <div className="menu-popover">
-            <button type="button" onClick={props.onImportReference}>Add local reference…</button>
-            <button type="button" onClick={props.onImportScene}>Open scene JSON…</button>
-            <button type="button" onClick={props.onExportScene}>Download scene JSON</button>
-            <button type="button" className="danger-action" onClick={props.onReset}>Reset scene</button>
+            <button type="button" onClick={props.onImportReference}>Add splat or mesh…</button>
+            <button type="button" onClick={props.onImportScene}>Open asset recipe…</button>
+            <button type="button" onClick={props.onExportScene}>Download asset recipe</button>
+            <button type="button" className="danger-action" onClick={props.onReset}>Reset workspace</button>
           </div>
         </details>
         <button className="mobile-panel-button" type="button" aria-expanded={props.inspectorOpen} onClick={props.onToggleInspector}>Inspect</button>
-        <button className={props.buildOpen ? "primary-action is-active" : "primary-action"} type="button" aria-expanded={props.buildOpen} onClick={props.onToggleBuild}>Build</button>
+        <button className={props.buildOpen ? "primary-action is-active" : "primary-action"} type="button" aria-expanded={props.buildOpen} onClick={props.onToggleBuild}>Export</button>
       </div>
     </header>
   );

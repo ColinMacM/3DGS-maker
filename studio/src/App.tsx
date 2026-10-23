@@ -3,7 +3,7 @@ import { loadCatalog, loadCollisionManifest } from "./api/catalog";
 import { requestBuild } from "./api/build-contract";
 import { parseStudioDocumentJson, serializeStudioDocument } from "./domain/schema";
 import { useSceneControlSync } from "./api/useSceneControlSync";
-import type { BuildResult, BuildTarget, CatalogEntry, CollisionBox, LayerVisibility, Measurement, ReferenceLayer, TableParameters, ToolMode, Transform, ViewportStatus } from "./domain/types";
+import type { BuildResult, BuildTarget, CatalogEntry, CollisionBox, LayerVisibility, Measurement, ReferenceLayer, SceneEntity, ToolMode, Transform, ViewPreset, ViewportStatus } from "./domain/types";
 import { ThreeViewport, type ThreeViewportHandle } from "./engine/ThreeViewport";
 import { hydrateReferenceBlobs, putReferenceBlob } from "./persistence/referenceBlobs";
 import { validateReferenceImport } from "./persistence/referenceImport";
@@ -11,6 +11,8 @@ import { useStudioState } from "./state/useStudioState";
 import { BuildPanel } from "./ui/BuildPanel";
 import { CommandBar } from "./ui/CommandBar";
 import { InspectorPanel } from "./ui/InspectorPanel";
+import { OverlayLegend } from "./ui/OverlayLegend";
+import { PipelineStrip } from "./ui/PipelineStrip";
 import { DatumStrip, StatusBar, ViewportToolbar } from "./ui/ViewportChrome";
 import { WorkspaceDock, type DockTab } from "./ui/WorkspaceDock";
 
@@ -19,13 +21,14 @@ const initialViewportStatus: ViewportStatus = {
   cursor: null,
   selectedId: null,
   message: "Starting renderer…",
+  renderErrors: [],
 };
 
 const viewportErrorPattern = /failed|error|unavailable|unsupported|no local source|could not/i;
 
 function safeDownloadName(name: string): string {
   const stem = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return `${stem || "workcell-scene"}.workcell.json`;
+  return `${stem || "asset-scene"}.asset.json`;
 }
 
 function downloadText(text: string, name: string): void {
@@ -83,6 +86,7 @@ export function App() {
 
   useSceneControlSync({
     document: studioDocument,
+    renderErrors: viewportStatus.renderErrors,
     synchronize: synchronizeDocument,
     reportError: setActionError,
   });
@@ -94,6 +98,14 @@ export function App() {
     )) ?? null,
     [catalog, studioDocument.assetId, studioDocument.assetVersion],
   );
+  const selectedEntity = useMemo(() => {
+    if (!viewportStatus.selectedId?.startsWith("entity:")) return null;
+    const id = viewportStatus.selectedId.slice("entity:".length);
+    return studioDocument.entities.find((entity) => entity.id === id) ?? null;
+  }, [studioDocument.entities, viewportStatus.selectedId]);
+  const sourceReady = Boolean(activeCatalog?.browser.spz)
+    || studioDocument.references.some((reference) => reference.kind !== "mesh" && Boolean(reference.objectUrl));
+  const assetReady = Boolean(activeCatalog?.browser.glb);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -195,9 +207,9 @@ export function App() {
       else if (key === "e") setMode("rotate");
       else if (key === "m") setMode("measure");
       else if (key === "f") viewportRef.current?.focus();
-      else if (key === "1") viewportRef.current?.setView("front");
-      else if (key === "3") viewportRef.current?.setView("right");
-      else if (key === "7") viewportRef.current?.setView("top");
+      else if (key === "1") dispatch({ type: "viewport.preset.set", preset: "front" });
+      else if (key === "3") dispatch({ type: "viewport.preset.set", preset: "right" });
+      else if (key === "7") dispatch({ type: "viewport.preset.set", preset: "top" });
       else if (key === "Escape") {
         setLeftOpen(false);
         setInspectorOpen(false);
@@ -206,7 +218,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [exportScene, redo, undo]);
+  }, [dispatch, exportScene, redo, undo]);
 
   const closeResponsivePanels = () => {
     setLeftOpen(false);
@@ -283,7 +295,7 @@ export function App() {
     event.target.value = "";
     if (!file) return;
     if (file.size > 5 * 1024 * 1024) {
-      setActionError("Scene JSON is larger than 5 MB. Choose a workcell recipe without embedded binary data.");
+      setActionError("Asset recipe JSON is larger than 5 MB. Keep binary data in external source files.");
       return;
     }
     try {
@@ -300,7 +312,7 @@ export function App() {
   };
 
   const resetScene = () => {
-    if (!window.confirm("Reset the scene to the welding-cell defaults? This clears local references and measurements.")) return;
+    if (!window.confirm("Reset the asset workspace? This clears local sources, objects, and measurements.")) return;
     dispatch({ type: "reset" });
     setMode("select");
     setActionError("");
@@ -329,10 +341,13 @@ export function App() {
   };
 
   const cancelBuild = () => buildAbortRef.current?.abort();
-  const setView = (view: "perspective" | "top" | "front" | "right") => viewportRef.current?.setView(view);
+  const setView = (preset: ViewPreset) => dispatch({ type: "viewport.preset.set", preset });
   const setLayer = (layer: keyof LayerVisibility, visible: boolean) => dispatch({ type: "layer.visibility.set", layer, visible });
-  const setTable = (patch: Partial<TableParameters>) => dispatch({ type: "table.parameters.update", patch });
-  const setTransform = (transform: Transform) => dispatch({ type: "table.transform.update", transform });
+  const updateEntity = (entity: SceneEntity) => dispatch({ type: "entity.upsert", entity });
+  const updateEntityTransform = (id: string, transform: Transform) => {
+    const entity = studioDocument.entities.find((candidate) => candidate.id === id);
+    if (entity) updateEntity({ ...entity, transform });
+  };
   const addMeasurement = (measurement: Measurement) => dispatch({ type: "measurement.add", measurement });
   const viewportError = viewportErrorPattern.test(viewportStatus.message)
     ? viewportStatus.message
@@ -363,8 +378,18 @@ export function App() {
         onToggleBuild={toggleBuild}
       />
 
+      <PipelineStrip
+        sourceReady={sourceReady}
+        assetReady={assetReady}
+        onOpenExports={() => {
+          setBuildOpen(true);
+          setLeftOpen(false);
+          setInspectorOpen(false);
+        }}
+      />
+
       <input ref={referenceInputRef} className="visually-hidden" type="file" accept=".ply,.splat,.ksplat,.spz,.glb,.obj" onChange={importReference} />
-      <input ref={sceneInputRef} className="visually-hidden" type="file" accept="application/json,.json,.workcell.json" onChange={importScene} />
+      <input ref={sceneInputRef} className="visually-hidden" type="file" accept="application/json,.json,.asset.json" onChange={importScene} />
 
       <div className="studio-main">
         <WorkspaceDock
@@ -379,6 +404,7 @@ export function App() {
           references={studioDocument.references}
           measurements={studioDocument.measurements}
           onTabChange={setDockTab}
+          onSelectAsset={(assetId, assetVersion) => dispatch({ type: "asset.select", assetId, assetVersion })}
           onRetryCatalog={() => setCatalogAttempt((attempt) => attempt + 1)}
           onAddReference={() => referenceInputRef.current?.click()}
           onLayerChange={setLayer}
@@ -390,10 +416,14 @@ export function App() {
         <main className="viewport-region">
           <ViewportToolbar
             mode={mode}
+            splatVisible={studioDocument.layers.catalogVisuals}
+            assetVisible={studioDocument.layers.assetVisuals}
             collisionsVisible={studioDocument.layers.collisions}
             onModeChange={setMode}
             onView={setView}
             onFocus={() => viewportRef.current?.focus()}
+            onToggleSplat={() => setLayer("catalogVisuals", !studioDocument.layers.catalogVisuals)}
+            onToggleAsset={() => setLayer("assetVisuals", !studioDocument.layers.assetVisuals)}
             onToggleCollisions={() => setLayer("collisions", !studioDocument.layers.collisions)}
           />
           <div className="viewport-stage">
@@ -404,11 +434,12 @@ export function App() {
               catalogPending={catalogLoading}
               manifest={manifest}
               mode={mode}
-              onTableTransformChange={setTransform}
+              onEntityTransformChange={updateEntityTransform}
               onMeasurement={addMeasurement}
               onStatus={setViewportStatus}
             />
-            {!activeCatalog && !catalogLoading && <div className="viewport-empty"><span aria-hidden="true">⌖</span><strong>Catalog visual unavailable</strong><p>The scene requires {studioDocument.assetId} version {studioDocument.assetVersion}. Add that exact entry to catalog.json; the editable table remains available.</p></div>}
+            {studioDocument.layers.measurements && <OverlayLegend bounds={studioDocument.bounds} onDismiss={() => dispatch({ type: "bounds.set", bounds: [] })} />}
+            {!activeCatalog && !catalogLoading && <div className="viewport-empty"><span aria-hidden="true">⌖</span><strong>Asset package unavailable</strong><p>The recipe requests {studioDocument.assetId} version {studioDocument.assetVersion}. Add that package to catalog.json or import a local source.</p></div>}
             {visibleWorkspaceError && <div className="viewport-alert" role="alert"><div><strong>Workspace needs attention</strong><p>{visibleWorkspaceError}</p></div><button type="button" onClick={() => {
               if (actionError) setActionError("");
               else if (manifestError) setManifestError("");
@@ -420,11 +451,10 @@ export function App() {
 
         <InspectorPanel
           open={inspectorOpen}
-          table={studioDocument.table}
-          transform={studioDocument.tableTransform}
+          catalog={activeCatalog}
+          selectedEntity={selectedEntity}
           layers={studioDocument.layers}
-          onTableChange={setTable}
-          onTransformChange={setTransform}
+          onEntityChange={updateEntity}
           onLayerChange={setLayer}
           onClose={() => setInspectorOpen(false)}
         />
@@ -432,7 +462,7 @@ export function App() {
 
       <BuildPanel open={buildOpen} activeTarget={buildTarget} result={buildResult} error={buildError} onBuild={startBuild} onCancel={cancelBuild} onClose={() => setBuildOpen(false)} />
       {(leftOpen || inspectorOpen || buildOpen) && <button type="button" className="drawer-backdrop" onClick={closeResponsivePanels} aria-label="Close open panel" />}
-      <StatusBar catalogCount={catalog.length} collisionCount={manifest?.collision_boxes.length ?? 0} referenceCount={studioDocument.references.length} status={viewportStatus} />
+      <StatusBar catalogCount={catalog.length} collisionCount={studioDocument.collisions.length || manifest?.collision_boxes.length || 0} referenceCount={studioDocument.references.length} status={viewportStatus} />
       <div className="visually-hidden" aria-live="polite">{viewportStatus.message}</div>
     </div>
   );

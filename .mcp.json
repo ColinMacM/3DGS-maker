@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "asset-studio-scene": {
+      "command": "/home/colin/.bun/bin/bun",
+      "args": [
+        "run",
+        "/home/colin/code/3DGS-maker/studio/src/mcp/server.ts"
+      ],
+      "env": {
+        "SCENE_STUDIO_URL": "http://127.0.0.1:4174"
+      }
+    }
+  }
+}

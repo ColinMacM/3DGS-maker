@@ -1,18 +1,30 @@
 import { isBlobObjectUrl, markReferenceUnavailable } from "./referenceAvailability";
 import type {
+  BoxTextureFace,
   LayerVisibility,
   Measurement,
+  PerforatedTableParameters,
+  QuaternionXyzw,
+  ReferenceKind,
+  ReferenceLayer,
+  SceneCollisionBox,
+  SceneBounds,
   SceneEntity,
   SceneEntityKind,
   SceneMaterial,
-  ReferenceKind,
-  ReferenceLayer,
+  SceneTexture,
   StudioDocument,
-  ViewportSettings,
-  TableParameters,
   Transform,
   Vec3,
+  ViewportSettings,
+  ViewPreset,
 } from "./types";
+import {
+  MAX_VOXEL_OVERLAY_CELLS,
+  validateOccupancy,
+  voxelCellCount,
+  type VoxelOccupancy,
+} from "./voxels";
 
 export interface ValidationIssue {
   path: string;
@@ -32,26 +44,39 @@ export class StudioDocumentValidationError extends Error {
 
 const DOCUMENT_KEYS = [
   "schemaVersion", "id", "name", "units", "upAxis", "assetId", "assetVersion",
-  "table", "tableTransform", "layers", "viewport", "entities", "references",
-  "measurements", "updatedAt",
+  "layers", "viewport", "entities", "collisions", "bounds", "references", "measurements",
+  "updatedAt",
 ] as const;
-const TABLE_KEYS = [
+const PERFORATED_TABLE_KEYS = [
   "width", "length", "topThickness", "topHeight", "holeDiameter", "holePitch",
   "rows", "columns", "edgeToHole", "legSize",
 ] as const;
 const TRANSFORM_KEYS = ["position", "quaternionXyzw", "scale"] as const;
-const LAYER_KEYS = ["catalogVisuals", "parametricModel", "collisions", "reference", "measurements"] as const;
+const LAYER_KEYS = ["catalogVisuals", "assetVisuals", "collisions", "reference", "measurements"] as const;
 const REFERENCE_KEYS = ["id", "name", "kind", "objectUrl", "transform", "opacity", "visible"] as const;
 const MEASUREMENT_KEYS = ["id", "label", "start", "end"] as const;
-const VIEWPORT_KEYS: readonly string[] = [];
+const BOUNDS_KEYS = ["id", "label", "color", "position", "quaternionXyzw", "size", "voxels", "expiresAt"] as const;
+const VOXEL_KEYS = ["voxelSizeM", "dimensions", "occupancy"] as const;
+const MAX_ENCODED_OCCUPANCY_LENGTH = 4_000_000;
+const VIEWPORT_KEYS = ["preset", "frameRequest"] as const;
+const MATERIAL_KEYS = ["color", "opacity", "texture"] as const;
+const TEXTURE_KEYS = ["dataUrl", "face", "width", "height"] as const;
+const VIEW_PRESETS = ["perspective", "top", "front", "right"] as const;
+const BOX_TEXTURE_FACES = [
+  "x-positive", "x-negative", "y-positive", "y-negative", "z-positive", "z-negative",
+] as const;
 const ENTITY_BASE_KEYS = ["id", "name", "kind", "visible", "parentId", "transform"] as const;
-const MATERIAL_KEYS = ["color", "opacity"] as const;
+const EXPLICIT_COLLISION_KEYS = [
+  "id", "name", "kind", "position", "quaternionXyzw", "size",
+] as const;
+const LINKED_COLLISION_KEYS = ["id", "name", "kind", "entityId"] as const;
 const ENTITY_KINDS: Readonly<Record<SceneEntityKind, true>> = {
   box: true,
   sphere: true,
   cylinder: true,
   capsule: true,
   model: true,
+  procedural: true,
   group: true,
   label: true,
 };
@@ -61,6 +86,7 @@ const ENTITY_KIND_KEYS: Readonly<Record<SceneEntityKind, readonly string[]>> = {
   cylinder: ["radius", "height", "material"],
   capsule: ["radius", "height", "material"],
   model: ["source"],
+  procedural: ["generator", "parameters"],
   group: [],
   label: ["text", "color", "backgroundColor", "size"],
 };
@@ -173,9 +199,13 @@ function parseTransform(value: unknown, path: string, issues: ValidationIssue[])
   return { position, quaternionXyzw, scale };
 }
 
-function parseTable(value: unknown, path: string, issues: ValidationIssue[]): TableParameters {
+function parsePerforatedTable(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): PerforatedTableParameters {
   const record = requireRecord(value, path, issues);
-  rejectUnknownKeys(record, TABLE_KEYS, path, issues);
+  rejectUnknownKeys(record, PERFORATED_TABLE_KEYS, path, issues);
   return {
     width: positiveNumber(record.width, `${path}.width`, issues, 100),
     length: positiveNumber(record.length, `${path}.length`, issues, 100),
@@ -190,12 +220,15 @@ function parseTable(value: unknown, path: string, issues: ValidationIssue[]): Ta
   };
 }
 
+
 function parseLayers(value: unknown, path: string, issues: ValidationIssue[]): LayerVisibility {
   const record = requireRecord(value, path, issues);
   rejectUnknownKeys(record, LAYER_KEYS, path, issues);
   return {
     catalogVisuals: boolean(record.catalogVisuals, `${path}.catalogVisuals`, issues),
-    parametricModel: boolean(record.parametricModel, `${path}.parametricModel`, issues),
+    assetVisuals: record.assetVisuals === undefined
+      ? true
+      : boolean(record.assetVisuals, `${path}.assetVisuals`, issues),
     collisions: boolean(record.collisions, `${path}.collisions`, issues),
     reference: boolean(record.reference, `${path}.reference`, issues),
     measurements: boolean(record.measurements, `${path}.measurements`, issues),
@@ -206,7 +239,45 @@ function parseViewport(value: unknown, path: string, issues: ValidationIssue[]):
   const input = requireRecord(value, path, issues);
   const { toby: _removedToby, ...record } = input;
   rejectUnknownKeys(record, VIEWPORT_KEYS, path, issues);
-  return {};
+  const preset = record.preset ?? "perspective";
+  if (!VIEW_PRESETS.includes(preset as ViewPreset)) {
+    issues.push({ path: `${path}.preset`, message: `must be one of ${VIEW_PRESETS.join(", ")}` });
+  }
+  const viewport: ViewportSettings = {
+    preset: VIEW_PRESETS.includes(preset as ViewPreset)
+      ? preset as ViewPreset
+      : "perspective",
+  };
+  if (record.frameRequest !== undefined) {
+    const frameRequest = record.frameRequest;
+    if (typeof frameRequest !== "number" || !Number.isSafeInteger(frameRequest) || frameRequest < 0) {
+      issues.push({ path: `${path}.frameRequest`, message: "must be a nonnegative integer" });
+    } else {
+      viewport.frameRequest = frameRequest;
+    }
+  }
+  return viewport;
+}
+
+function parseTexture(value: unknown, path: string, issues: ValidationIssue[]): SceneTexture {
+  const record = requireRecord(value, path, issues);
+  rejectUnknownKeys(record, TEXTURE_KEYS, path, issues);
+  const dataUrl = requiredString(record.dataUrl, `${path}.dataUrl`, issues, 500_000);
+  if (!dataUrl.startsWith("data:image/png;base64,")) {
+    issues.push({ path: `${path}.dataUrl`, message: "must be a base64 PNG data URL" });
+  }
+  const face = record.face;
+  if (!BOX_TEXTURE_FACES.includes(face as BoxTextureFace)) {
+    issues.push({ path: `${path}.face`, message: `must be one of ${BOX_TEXTURE_FACES.join(", ")}` });
+  }
+  return {
+    dataUrl,
+    face: BOX_TEXTURE_FACES.includes(face as BoxTextureFace)
+      ? face as BoxTextureFace
+      : "z-positive",
+    width: integer(record.width, `${path}.width`, issues, 256),
+    height: integer(record.height, `${path}.height`, issues, 256),
+  };
 }
 
 function parseMaterial(value: unknown, path: string, issues: ValidationIssue[]): SceneMaterial {
@@ -217,6 +288,9 @@ function parseMaterial(value: unknown, path: string, issues: ValidationIssue[]):
   return {
     color: color(record.color, `${path}.color`, issues),
     opacity,
+    ...(record.texture === undefined
+      ? {}
+      : { texture: parseTexture(record.texture, `${path}.texture`, issues) }),
   };
 }
 
@@ -294,6 +368,29 @@ function parseEntity(value: unknown, path: string, issues: ValidationIssue[]): S
       }
       return { ...base, kind, source };
     }
+    case "procedural": {
+      const generator = requiredString(
+        record.generator,
+        `${path}.generator`,
+        issues,
+      );
+      if (generator !== "perforated-table") {
+        issues.push({
+          path: `${path}.generator`,
+          message: 'must equal "perforated-table"',
+        });
+      }
+      return {
+        ...base,
+        kind,
+        generator: "perforated-table",
+        parameters: parsePerforatedTable(
+          record.parameters,
+          `${path}.parameters`,
+          issues,
+        ),
+      };
+    }
     case "label":
       return {
         ...base,
@@ -343,6 +440,7 @@ function validateEntityHierarchy(
   }
 }
 
+
 function parseReference(value: unknown, path: string, issues: ValidationIssue[]): ReferenceLayer {
   const record = requireRecord(value, path, issues);
   rejectUnknownKeys(record, REFERENCE_KEYS, path, issues);
@@ -378,6 +476,147 @@ function parseMeasurement(value: unknown, path: string, issues: ValidationIssue[
     end: tuple(record.end, 3, `${path}.end`, issues) as Vec3,
   };
 }
+function parseVoxels(value: unknown, path: string, issues: ValidationIssue[]): VoxelOccupancy {
+  const record = requireRecord(value, path, issues);
+  rejectUnknownKeys(record, VOXEL_KEYS, path, issues);
+  const voxelSizeM = positiveNumber(record.voxelSizeM, `${path}.voxelSizeM`, issues, 1);
+  const dimensions = tuple(record.dimensions, 3, `${path}.dimensions`, issues) as Vec3;
+  dimensions.forEach((component, index) => {
+    integer(component, `${path}.dimensions[${index}]`, issues, MAX_VOXEL_OVERLAY_CELLS);
+  });
+  const cellCount = voxelCellCount(dimensions);
+  if (cellCount > MAX_VOXEL_OVERLAY_CELLS) {
+    issues.push({ path: `${path}.dimensions`, message: `must describe at most ${MAX_VOXEL_OVERLAY_CELLS} cells` });
+  }
+  const occupancy = typeof record.occupancy === "string" ? record.occupancy : "";
+  if (
+    occupancy.length === 0
+    || occupancy.length > MAX_ENCODED_OCCUPANCY_LENGTH
+    || occupancy.length % 4 !== 0
+    || !/^[A-Za-z0-9+/]*={0,2}$/.test(occupancy)
+  ) {
+    issues.push({
+      path: `${path}.occupancy`,
+      message: `must be base64 run-length occupancy of at most ${MAX_ENCODED_OCCUPANCY_LENGTH} characters`,
+    });
+  } else if (
+    cellCount <= MAX_VOXEL_OVERLAY_CELLS
+    && dimensions.every((component) => Number.isInteger(component) && component >= 1)
+  ) {
+    try {
+      validateOccupancy(occupancy, cellCount);
+    } catch (error) {
+      issues.push({
+        path: `${path}.occupancy`,
+        message: error instanceof Error ? error.message : "must encode exactly the grid's cells",
+      });
+    }
+  }
+  return { voxelSizeM, dimensions, occupancy };
+}
+function parseBounds(value: unknown, path: string, issues: ValidationIssue[]): SceneBounds {
+  const record = requireRecord(value, path, issues);
+  rejectUnknownKeys(record, BOUNDS_KEYS, path, issues);
+  const quaternionXyzw = tuple(
+    record.quaternionXyzw,
+    4,
+    `${path}.quaternionXyzw`,
+    issues,
+  ) as QuaternionXyzw;
+  if (quaternionXyzw.every((component) => component === 0)) {
+    issues.push({ path: `${path}.quaternionXyzw`, message: "must not be the zero quaternion" });
+  }
+  const expiresAt = record.expiresAt === undefined
+    ? undefined
+    : requiredString(record.expiresAt, `${path}.expiresAt`, issues);
+  if (expiresAt && Number.isNaN(Date.parse(expiresAt))) {
+    issues.push({ path: `${path}.expiresAt`, message: "must be a valid date-time string" });
+  }
+  const boundsColor = record.color === undefined
+    ? undefined
+    : color(record.color, `${path}.color`, issues);
+  return {
+    id: requiredString(record.id, `${path}.id`, issues),
+    label: requiredString(record.label, `${path}.label`, issues),
+    ...(boundsColor ? { color: boundsColor } : {}),
+    position: tuple(record.position, 3, `${path}.position`, issues) as Vec3,
+    quaternionXyzw,
+    size: positiveVec3(record.size, `${path}.size`, issues),
+    ...(record.voxels === undefined ? {} : { voxels: parseVoxels(record.voxels, `${path}.voxels`, issues) }),
+    ...(expiresAt ? { expiresAt } : {}),
+  };
+}
+function parseCollision(
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+): SceneCollisionBox {
+  const record = requireRecord(value, path, issues);
+  const id = requiredString(record.id, `${path}.id`, issues);
+  const name = requiredString(record.name, `${path}.name`, issues);
+  if (record.kind === "entity-box") {
+    rejectUnknownKeys(record, LINKED_COLLISION_KEYS, path, issues);
+    return {
+      id,
+      name,
+      kind: "entity-box",
+      entityId: requiredString(record.entityId, `${path}.entityId`, issues),
+    };
+  }
+
+  if (record.kind !== "box") {
+    issues.push({
+      path: `${path}.kind`,
+      message: "must be one of: box, entity-box",
+    });
+  }
+  rejectUnknownKeys(record, EXPLICIT_COLLISION_KEYS, path, issues);
+  const quaternionXyzw = tuple(
+    record.quaternionXyzw,
+    4,
+    `${path}.quaternionXyzw`,
+    issues,
+  ) as QuaternionXyzw;
+  if (quaternionXyzw.every((component) => component === 0)) {
+    issues.push({
+      path: `${path}.quaternionXyzw`,
+      message: "must not be the zero quaternion",
+    });
+  }
+  return {
+    id,
+    name,
+    kind: "box",
+    position: tuple(record.position, 3, `${path}.position`, issues) as Vec3,
+    quaternionXyzw,
+    size: positiveVec3(record.size, `${path}.size`, issues),
+  };
+}
+
+function validateCollisionLinks(
+  collisions: readonly SceneCollisionBox[],
+  entities: readonly SceneEntity[],
+  path: string,
+  issues: ValidationIssue[],
+): void {
+  const entitiesById = new Map(entities.map((entity) => [entity.id, entity] as const));
+  collisions.forEach((collision, index) => {
+    if (collision.kind !== "entity-box") return;
+    const entity = entitiesById.get(collision.entityId);
+    if (!entity) {
+      issues.push({
+        path: `${path}[${index}].entityId`,
+        message: "does not match an entity id",
+      });
+    } else if (entity.kind !== "box") {
+      issues.push({
+        path: `${path}[${index}].entityId`,
+        message: "must reference a box entity",
+      });
+    }
+  });
+}
+
 
 function parseArray<T>(
   value: unknown,
@@ -462,23 +701,87 @@ function migrateCatalogComposition(value: unknown): unknown {
   };
 }
 
-/** Validates v2 input, migrating persisted v1 lighting state to fullbright data. */
+function migrateVersion2(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return value;
+  const document = value as Record<string, unknown>;
+  if (document.schemaVersion !== 2) return value;
+
+  const existingEntities = Array.isArray(document.entities) ? document.entities : [];
+  const existingIds = new Set(
+    existingEntities.flatMap((entity) => {
+      if (typeof entity !== "object" || entity === null || Array.isArray(entity)) return [];
+      const id = (entity as Record<string, unknown>).id;
+      return typeof id === "string" ? [id] : [];
+    }),
+  );
+  let generatedId = "generated-fixture";
+  for (let suffix = 2; existingIds.has(generatedId); suffix += 1) {
+    generatedId = `generated-fixture-${suffix}`;
+  }
+
+  const layers = (
+    typeof document.layers === "object"
+    && document.layers !== null
+    && !Array.isArray(document.layers)
+  ) ? document.layers as Record<string, unknown> : {};
+  const {
+    parametricModel,
+    ...portableLayers
+  } = layers;
+  const {
+    table,
+    tableTransform,
+    ...portableDocument
+  } = document;
+
+  // The legacy built-in table only survives as an entity when it was actually
+  // shown. Migrating a hidden table would leave an invisible entity that agents
+  // cannot see in the viewport yet still find in `scene_inspect`.
+  const keepFixture = parametricModel === true && table !== undefined;
+  return {
+    ...portableDocument,
+    schemaVersion: 3,
+    layers: portableLayers,
+    entities: keepFixture
+      ? [
+          ...existingEntities,
+          {
+            id: generatedId,
+            name: "Generated fixture",
+            kind: "procedural",
+            generator: "perforated-table",
+            visible: true,
+            transform: tableTransform,
+            parameters: table,
+          },
+        ]
+      : existingEntities,
+  };
+}
+
+/** Validates current input, migrating older scene documents when necessary. */
 export function validateStudioDocument(value: unknown): StudioDocument {
   const issues: ValidationIssue[] = [];
-  const record = requireRecord(migrateCatalogComposition(migrateVersion1(value)), "$", issues);
+  const migrated = migrateVersion2(migrateCatalogComposition(migrateVersion1(value)));
+  const record = requireRecord(migrated, "$", issues);
   rejectUnknownKeys(record, DOCUMENT_KEYS, "$", issues);
-  if (record.schemaVersion !== 2) issues.push({ path: "$.schemaVersion", message: "must equal 2" });
+  if (record.schemaVersion !== 3) issues.push({ path: "$.schemaVersion", message: "must equal 3" });
   if (record.units !== "m") issues.push({ path: "$.units", message: 'must equal "m"' });
   if (record.upAxis !== "Z") issues.push({ path: "$.upAxis", message: 'must equal "Z"' });
 
 
   const references = parseArray(record.references, "$.references", issues, 32, parseReference);
   const entities = parseArray(record.entities ?? [], "$.entities", issues, 256, parseEntity);
+  const collisions = parseArray(record.collisions ?? [], "$.collisions", issues, 256, parseCollision);
+  const bounds = parseArray(record.bounds ?? [], "$.bounds", issues, 256, parseBounds);
   const measurements = parseArray(record.measurements, "$.measurements", issues, 128, parseMeasurement);
   rejectDuplicateIds(references, "$.references", issues);
+  rejectDuplicateIds(collisions, "$.collisions", issues);
+  rejectDuplicateIds(bounds, "$.bounds", issues);
   rejectDuplicateIds(measurements, "$.measurements", issues);
   rejectDuplicateIds(entities, "$.entities", issues);
   validateEntityHierarchy(entities, "$.entities", issues);
+  validateCollisionLinks(collisions, entities, "$.collisions", issues);
 
   const updatedAt = requiredString(record.updatedAt, "$.updatedAt", issues);
   if (updatedAt && Number.isNaN(Date.parse(updatedAt))) {
@@ -486,20 +789,20 @@ export function validateStudioDocument(value: unknown): StudioDocument {
   }
 
   const document: StudioDocument = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: requiredString(record.id, "$.id", issues),
     name: requiredString(record.name, "$.name", issues),
     units: "m",
     upAxis: "Z",
     assetId: requiredString(record.assetId, "$.assetId", issues),
     assetVersion: requiredString(record.assetVersion, "$.assetVersion", issues),
-    table: parseTable(record.table, "$.table", issues),
-    tableTransform: parseTransform(record.tableTransform, "$.tableTransform", issues),
     layers: parseLayers(record.layers, "$.layers", issues),
     viewport: parseViewport(record.viewport ?? {}, "$.viewport", issues),
     entities,
+    collisions,
     references,
     measurements,
+    bounds,
     updatedAt,
   };
 

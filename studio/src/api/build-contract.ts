@@ -1,6 +1,6 @@
 import type { BuildResult, BuildTarget } from "../domain/types";
 
-export const BUILD_TARGETS = ["blender", "openusd", "mujoco"] as const satisfies readonly BuildTarget[];
+export const BUILD_TARGETS = ["isaac", "mujoco", "unreal"] as const satisfies readonly BuildTarget[];
 
 export function isBuildTarget(value: unknown): value is BuildTarget {
   return typeof value === "string" && BUILD_TARGETS.some((target) => target === value);

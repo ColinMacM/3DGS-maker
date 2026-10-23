@@ -6,7 +6,7 @@ import {
 import { serializeStudioDocument, validateStudioDocument } from "../domain/schema";
 import type { StudioDocument } from "../domain/types";
 
-export const STUDIO_DRAFT_STORAGE_KEY = "workcell-studio:draft:v1";
+export const STUDIO_DRAFT_STORAGE_KEY = "asset-studio:draft:v1";
 const BROWSER_REFERENCE_UNAVAILABLE_REASON =
   "The local file could not be restored from browser storage. Re-import it to restore this reference.";
 

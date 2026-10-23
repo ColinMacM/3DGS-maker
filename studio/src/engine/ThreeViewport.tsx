@@ -15,18 +15,23 @@ import {
   Color,
   DirectionalLight,
   DoubleSide,
+  EdgesGeometry,
+  Float32BufferAttribute,
   GridHelper,
   Group,
   HemisphereLight,
   Line,
   LineBasicMaterial,
+  LineSegments,
   LinearFilter,
   Material,
   Mesh,
   MeshBasicMaterial,
+  Matrix4,
   LoadingManager,
   Object3D,
   PerspectiveCamera,
+  Quaternion,
   Plane,
   Raycaster,
   Scene,
@@ -50,11 +55,14 @@ import type {
   CatalogEntry,
   CollisionBox,
   Measurement,
+  SceneBounds,
+  SceneEntity,
   ReferenceLayer,
   StudioDocument,
   ToolMode,
   Transform,
   Vec3,
+  ViewPreset,
   ViewportStatus,
 } from "../domain/types";
 import {
@@ -68,12 +76,18 @@ import {
   disposeObject3D,
   replaceGroupContents,
 } from "./dispose";
-import { createParametricTable } from "./ParametricTable";
 import { SceneEntityRenderer } from "./SceneEntities";
+import { isCatalogAssetShown } from "../domain/sceneRules";
+import {
+  decodeOccupancy,
+  voxelCellCount,
+  voxelWireframe,
+  type VoxelOccupancy,
+} from "../domain/voxels";
 
 export interface ThreeViewportHandle {
   focus(): void;
-  setView(view: "perspective" | "top" | "front" | "right"): void;
+  setView(view: ViewPreset): void;
 }
 
 export interface ThreeViewportProps {
@@ -82,13 +96,13 @@ export interface ThreeViewportProps {
   catalogPending: boolean;
   manifest: { collision_boxes: CollisionBox[] } | null;
   mode: ToolMode;
-  onTableTransformChange(transform: Transform): void;
+  onEntityTransformChange(id: string, transform: Transform): void;
   onMeasurement(measurement: Measurement): void;
   onStatus(status: ViewportStatus): void;
 }
 
 interface ViewportCallbacks {
-  tableTransformChanged(transform: Transform): void;
+  entityTransformChanged(id: string, transform: Transform): void;
   measurementCreated(measurement: Measurement): void;
   statusChanged(status: ViewportStatus): void;
 }
@@ -143,6 +157,7 @@ const VIEWPORT_STYLE: CSSProperties = {
 const TMP_POINTER = new Vector2();
 const TMP_DIRECTION = new Vector3();
 const TMP_BOX = new Box3();
+const TMP_OBJECT_BOX = new Box3();
 const TMP_SPHERE = new Sphere();
 const FLOOR_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 const SPLAT_EXTENSIONS: Readonly<Record<string, true>> = {
@@ -165,6 +180,15 @@ function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   return String(error);
 }
+function isObjectVisible(object: Object3D): boolean {
+  let current: Object3D | null = object;
+  while (current) {
+    if (!current.visible) return false;
+    current = current.parent;
+  }
+  return true;
+}
+
 
 function referenceExtension(reference: ReferenceLayer): string {
   const candidates = [reference.name, reference.objectUrl ?? ""];
@@ -209,6 +233,28 @@ function setObjectOpacity(root: Object3D, opacity: number): void {
       material.needsUpdate = true;
     }
   });
+}
+
+function addAssetReviewEdges(root: Object3D): void {
+  const meshes: Mesh[] = [];
+  root.traverse((object) => {
+    if (object instanceof Mesh) meshes.push(object);
+  });
+  for (const mesh of meshes) {
+    const edges = new LineSegments(
+      new EdgesGeometry(mesh.geometry, 24),
+      new LineBasicMaterial({
+        color: 0x35d7ff,
+        transparent: true,
+        opacity: 0.92,
+        depthTest: false,
+        depthWrite: false,
+      }),
+    );
+    edges.name = "Asset review edges";
+    edges.renderOrder = 12;
+    mesh.add(edges);
+  }
 }
 
 function createMeasurementLabel(measurement: Measurement): Sprite | null {
@@ -299,6 +345,128 @@ function createMeasurements(measurements: Measurement[]): Group {
 
   return root;
 }
+function createVoxelWireframe(boundsItem: SceneBounds & { voxels: VoxelOccupancy }, material: LineBasicMaterial): LineSegments {
+  const { voxelSizeM, dimensions, occupancy } = boundsItem.voxels;
+  const occupied = decodeOccupancy(occupancy, voxelCellCount(dimensions));
+  const origin: Vec3 = [-boundsItem.size[0] / 2, -boundsItem.size[1] / 2, -boundsItem.size[2] / 2];
+  const wireframe = voxelWireframe(occupied, dimensions, voxelSizeM, origin);
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(wireframe.positions, 3));
+  const lines = new LineSegments(geometry, material);
+  lines.name = wireframe.outline ? `${boundsItem.label} (surface outline)` : boundsItem.label;
+  lines.position.set(...boundsItem.position);
+  lines.quaternion.set(...boundsItem.quaternionXyzw).normalize();
+  lines.renderOrder = 23;
+  return lines;
+}
+
+const DEFAULT_BOUNDS_COLOR = "#35d7ff";
+
+/**
+ * Renders the active (unexpired) agent overlays. The legend and its dismiss
+ * button are HTML (`src/ui/OverlayLegend.tsx`), not part of the 3D scene.
+ */
+function createBounds(bounds: readonly SceneBounds[]): Group {
+  const root = new Group();
+  root.name = "Splat bounding boxes";
+  if (bounds.length === 0) return root;
+  const box = new BoxGeometry(1, 1, 1);
+  const geometry = new EdgesGeometry(box);
+  box.dispose();
+  const materials = new Map<string, LineBasicMaterial>();
+  for (const boundsItem of bounds) {
+    const overlayColor = boundsItem.color ?? DEFAULT_BOUNDS_COLOR;
+    const materialKey = `${overlayColor}:${boundsItem.voxels ? "voxels" : "box"}`;
+    let material = materials.get(materialKey);
+    if (!material) {
+      material = new LineBasicMaterial({
+        color: overlayColor,
+        transparent: true,
+        opacity: boundsItem.voxels ? 0.72 : 0.98,
+        depthTest: false,
+        depthWrite: false,
+      });
+      materials.set(materialKey, material);
+    }
+    if (boundsItem.voxels) {
+      root.add(createVoxelWireframe({ ...boundsItem, voxels: boundsItem.voxels }, material));
+      continue;
+    }
+    const lines = new LineSegments(geometry, material);
+    lines.name = boundsItem.label;
+    lines.position.set(...boundsItem.position);
+    lines.quaternion.set(...boundsItem.quaternionXyzw).normalize();
+    lines.scale.set(...boundsItem.size);
+    lines.renderOrder = 22;
+    root.add(lines);
+  }
+  return root;
+}
+
+/**
+ * Resolves the collider list shown in the collisions layer. Any authored
+ * collider replaces every package-manifest collider (the manifest is only the
+ * fallback for scenes without authored colliders).
+ *
+ * A linked `entity-box` collider resolves from the entity's world transform even
+ * when the entity, or one of its ancestors, is hidden: visibility is a display
+ * choice, while colliders describe physical geometry. Only a missing entity or
+ * a non-box entity yields no collider.
+ */
+function resolveCollisionBoxes(
+  document: StudioDocument,
+  fallback: readonly CollisionBox[],
+): CollisionBox[] {
+  if (document.collisions.length === 0) return [...fallback];
+
+  const entities = new Map(document.entities.map((entity) => [entity.id, entity] as const));
+  const worldMatrices = new Map<string, Matrix4>();
+  const worldMatrixFor = (entity: SceneEntity): Matrix4 => {
+    const cached = worldMatrices.get(entity.id);
+    if (cached) return cached;
+    const transform = entity.transform;
+    const local = new Matrix4().compose(
+      new Vector3(...transform.position),
+      new Quaternion(...transform.quaternionXyzw).normalize(),
+      new Vector3(...transform.scale),
+    );
+    const world = entity.parentId
+      ? new Matrix4().multiplyMatrices(worldMatrixFor(entities.get(entity.parentId)!), local)
+      : local;
+    worldMatrices.set(entity.id, world);
+    return world;
+  };
+
+  return document.collisions.flatMap((collision): CollisionBox[] => {
+    if (collision.kind === "box") {
+      const [x, y, z, w] = collision.quaternionXyzw;
+      return [{
+        name: collision.name,
+        pos: collision.position,
+        quatWxyz: [w, x, y, z],
+        size: collision.size,
+      }];
+    }
+
+    const entity = entities.get(collision.entityId);
+    if (!entity || entity.kind !== "box") return [];
+    const position = new Vector3();
+    const quaternion = new Quaternion();
+    const scale = new Vector3();
+    worldMatrixFor(entity).decompose(position, quaternion, scale);
+    return [{
+      name: collision.name,
+      pos: [position.x, position.y, position.z],
+      quatWxyz: [quaternion.w, quaternion.x, quaternion.y, quaternion.z],
+      size: [
+        entity.size[0] * Math.abs(scale.x),
+        entity.size[1] * Math.abs(scale.y),
+        entity.size[2] * Math.abs(scale.z),
+      ],
+    }];
+  });
+}
+
 
 
 
@@ -311,11 +479,13 @@ class ViewportEngine {
   private readonly orbit: OrbitControls;
   private readonly transformControls: TransformControls;
   private readonly canonicalRoot = new Group();
-  private readonly tableRoot = new Group();
-  private readonly catalogRoot = new Group();
+  private readonly sourceRoot = new Group();
+  private readonly assetRoot = new Group();
+  private readonly catalogAssetRoot = new Group();
   private readonly collisionRoot = new Group();
   private readonly referenceRoot = new Group();
   private readonly measurementRoot = new Group();
+  private readonly boundsRoot = new Group();
   private readonly entityRoot = new Group();
   private readonly entityRenderer: SceneEntityRenderer;
   private readonly raycaster = new Raycaster();
@@ -339,10 +509,11 @@ class ViewportEngine {
   private selectedObject: Object3D | null = null;
   private selectedId: string | null = null;
   private currentMode: ToolMode = "select";
-  private tableParameters: StudioDocument["table"] | null = null;
   private measurementDefinitions: Measurement[] | null = null;
+  private boundsDefinitions: StudioDocument["bounds"] | null = null;
+  private boundsExpiryTimer: number | undefined;
   private entityDefinitions: StudioDocument["entities"] | null = null;
-  private manifest: { collision_boxes: CollisionBox[] } | null = null;
+  private collisionSignature = "";
   private catalogKey = "";
   private catalogGeneration = 0;
   private referenceGeneration = 0;
@@ -352,6 +523,13 @@ class ViewportEngine {
   private pointerIsDown = false;
   private ignorePointerUp = false;
   private initializedView = false;
+  private viewPreset: ViewPreset = "perspective";
+  /** Last seen `viewport.frameRequest`; null before the first document. */
+  private frameRequest: number | null = null;
+  /** Current catalog splat/GLB load failures. */
+  private catalogErrors: string[] = [];
+  /** Current reference load failures keyed by reference id. */
+  private readonly referenceErrors = new Map<string, string>();
   private scenePresented = false;
   private disposed = false;
   private status: ViewportStatus = {
@@ -359,6 +537,7 @@ class ViewportEngine {
     cursor: null,
     selectedId: null,
     message: "Initializing viewport…",
+    renderErrors: [],
   };
 
   constructor(host: HTMLDivElement, callbacks: ViewportCallbacks) {
@@ -366,7 +545,7 @@ class ViewportEngine {
     this.callbacks = callbacks;
     this.entityRenderer = new SceneEntityRenderer(
       this.entityRoot,
-      (message) => this.emitStatus({ message }),
+      (failure) => this.emitRenderErrors(failure),
     );
     this.scene.background = new Color(0x0e1418);
 
@@ -399,22 +578,25 @@ class ViewportEngine {
 
     configureCanonicalRoot(this.canonicalRoot);
     this.canonicalRoot.name = "Canonical Z-up root";
-    this.tableRoot.name = "Table transform";
-    this.tableRoot.userData.selectionId = "table";
-    this.catalogRoot.name = "Catalog visuals";
-    this.catalogRoot.userData.selectionId = "catalog";
+    this.sourceRoot.name = "Source splat";
+    this.sourceRoot.userData.selectionId = "source";
+    this.assetRoot.name = "3D asset";
+    this.assetRoot.userData.selectionId = "asset";
+    this.catalogAssetRoot.name = "Catalog 3D asset";
     this.collisionRoot.name = "Collision proxies";
     this.collisionRoot.userData.selectionId = "collisions";
     this.referenceRoot.name = "References";
     this.measurementRoot.name = "Measurement layers";
-    this.entityRoot.name = "Live scene entities";
+    this.boundsRoot.name = "Splat bounding-box overlays";
+    this.entityRoot.name = "Scene-authored 3D asset";
+    this.assetRoot.add(this.catalogAssetRoot, this.entityRoot);
     this.canonicalRoot.add(
-      this.catalogRoot,
-      this.tableRoot,
+      this.sourceRoot,
+      this.assetRoot,
       this.collisionRoot,
       this.referenceRoot,
       this.measurementRoot,
-      this.entityRoot,
+      this.boundsRoot,
     );
     this.scene.add(this.canonicalRoot);
 
@@ -467,9 +649,14 @@ class ViewportEngine {
       this.ignorePointerUp = true;
     });
     this.transformControls.addEventListener("mouseUp", () => {
-      if (this.transformControls.object === this.tableRoot) {
-        this.callbacks.tableTransformChanged(
-          readCanonicalTransform(this.tableRoot),
+      if (
+        this.selectedObject
+        && this.selectedId?.startsWith("entity:")
+        && this.transformControls.object === this.selectedObject
+      ) {
+        this.callbacks.entityTransformChanged(
+          this.selectedId.slice("entity:".length),
+          readCanonicalTransform(this.selectedObject),
         );
       }
     });
@@ -511,23 +698,20 @@ class ViewportEngine {
     manifest: { collision_boxes: CollisionBox[] } | null,
     mode: ToolMode,
   ): void {
+    const viewChanged = this.viewPreset !== document.viewport.preset;
+    this.viewPreset = document.viewport.preset;
+    const frameRequest = document.viewport.frameRequest ?? 0;
+    const frameRequested = this.frameRequest !== null && this.frameRequest !== frameRequest;
+    this.frameRequest = frameRequest;
 
-    if (this.tableParameters !== document.table) {
-      this.tableParameters = document.table;
-      replaceGroupContents(
-        this.tableRoot,
-        createParametricTable(document.table),
-      );
-    }
-    if (!this.transformControls.dragging) {
-      applyCanonicalTransform(this.tableRoot, document.tableTransform);
-    }
-
-    this.tableRoot.visible = document.layers.parametricModel;
-    this.catalogRoot.visible = document.layers.catalogVisuals;
+    this.sourceRoot.visible = document.layers.catalogVisuals;
+    this.assetRoot.visible = document.layers.assetVisuals;
+    this.entityRoot.visible = document.layers.assetVisuals;
+    this.catalogAssetRoot.visible = isCatalogAssetShown(document);
     this.collisionRoot.visible = document.layers.collisions;
     this.referenceRoot.visible = document.layers.reference;
     this.measurementRoot.visible = document.layers.measurements;
+    this.boundsRoot.visible = document.layers.measurements;
 
     if (this.measurementDefinitions !== document.measurements) {
       this.measurementDefinitions = document.measurements;
@@ -537,16 +721,29 @@ class ViewportEngine {
       );
     }
 
+    if (this.boundsDefinitions !== document.bounds) {
+      this.boundsDefinitions = document.bounds;
+      this.renderActiveBounds();
+    }
+
     if (this.entityDefinitions !== document.entities) {
       this.entityDefinitions = document.entities;
-      if (this.selectedId?.startsWith("entity:")) this.select(null, null);
       this.entityRenderer.update(document.entities);
+      if (this.selectedId?.startsWith("entity:")) {
+        const entityId = this.selectedId.slice("entity:".length);
+        this.select(this.entityRenderer.rootFor(entityId), this.selectedId);
+      }
     }
 
 
-    if (this.manifest !== manifest) {
-      this.manifest = manifest;
-      this.rebuildCollisions(manifest?.collision_boxes ?? []);
+    const collisionBoxes = resolveCollisionBoxes(
+      document,
+      manifest?.collision_boxes ?? [],
+    );
+    const collisionSignature = JSON.stringify(collisionBoxes);
+    if (this.collisionSignature !== collisionSignature) {
+      this.collisionSignature = collisionSignature;
+      this.rebuildCollisions(collisionBoxes);
     }
 
     this.updateCatalog(catalog);
@@ -555,6 +752,7 @@ class ViewportEngine {
     this.updateSelectionVisibility();
 
     if (!this.initializedView && !catalogPending && !catalog) this.presentScene();
+    if ((viewChanged || frameRequested) && this.initializedView) this.setView(this.viewPreset);
   }
 
   focus(): void {
@@ -562,7 +760,7 @@ class ViewportEngine {
     this.frameScene();
   }
 
-  setView(view: "perspective" | "top" | "front" | "right"): void {
+  setView(view: ViewPreset): void {
     const bounds = this.visibleBounds();
     bounds.getBoundingSphere(TMP_SPHERE);
     const radius = Math.max(TMP_SPHERE.radius, 0.35);
@@ -590,6 +788,10 @@ class ViewportEngine {
     this.disposed = true;
     this.catalogGeneration += 1;
     this.referenceGeneration += 1;
+    if (this.boundsExpiryTimer !== undefined) {
+      window.clearTimeout(this.boundsExpiryTimer);
+      this.boundsExpiryTimer = undefined;
+    }
     this.renderer.setAnimationLoop(null);
     this.resizeObserver.disconnect();
     this.renderer.domElement.removeEventListener(
@@ -660,16 +862,59 @@ class ViewportEngine {
         Math.abs(next.cursor[0] - this.status.cursor[0]) < 0.0005 &&
         Math.abs(next.cursor[1] - this.status.cursor[1]) < 0.0005 &&
         Math.abs(next.cursor[2] - this.status.cursor[2]) < 0.0005);
+    const sameRenderErrors =
+      next.renderErrors === this.status.renderErrors ||
+      (next.renderErrors.length === this.status.renderErrors.length &&
+        next.renderErrors.every((error, index) => error === this.status.renderErrors[index]));
     if (
       next.ready === this.status.ready &&
       next.selectedId === this.status.selectedId &&
       next.message === this.status.message &&
-      sameCursor
+      sameCursor &&
+      sameRenderErrors
     ) {
       return;
     }
     this.status = next;
     this.callbacks.statusChanged(next);
+  }
+
+  /**
+   * Recomputes `renderErrors` from the current catalog, entity and reference
+   * failures. `failure` is a newly added error to surface as the status message.
+   */
+  private emitRenderErrors(failure: string | null = null): void {
+    this.emitStatus({
+      renderErrors: [
+        ...this.catalogErrors,
+        ...this.entityRenderer.loadErrors(),
+        ...this.referenceErrors.values(),
+      ],
+      ...(failure ? { message: failure } : {}),
+    });
+  }
+
+  /**
+   * Shows only unexpired overlays and schedules a re-render at the next expiry,
+   * so each overlay disappears at its own `expiresAt` while the rest remain.
+   */
+  private renderActiveBounds(): void {
+    if (this.boundsExpiryTimer !== undefined) {
+      window.clearTimeout(this.boundsExpiryTimer);
+      this.boundsExpiryTimer = undefined;
+    }
+    const now = Date.now();
+    const activeBounds = (this.boundsDefinitions ?? []).filter(({ expiresAt }) => (
+      expiresAt === undefined || Date.parse(expiresAt) > now
+    ));
+    replaceGroupContents(this.boundsRoot, createBounds(activeBounds));
+    const expirations = activeBounds
+      .flatMap(({ expiresAt }) => expiresAt === undefined ? [] : [Date.parse(expiresAt)]);
+    if (expirations.length === 0) return;
+    this.boundsExpiryTimer = window.setTimeout(() => {
+      this.boundsExpiryTimer = undefined;
+      if (!this.disposed) this.renderActiveBounds();
+    }, Math.max(0, Math.min(...expirations) - now));
   }
 
   private rebuildCollisions(boxes: CollisionBox[]): void {
@@ -715,68 +960,100 @@ class ViewportEngine {
     if (key === this.catalogKey) return;
     this.catalogKey = key;
     const generation = ++this.catalogGeneration;
-    if (this.selectedObject === this.catalogRoot) this.select(null, null);
-    replaceGroupContents(this.catalogRoot, null);
-    this.catalogRoot.userData.selectionId = catalog
-      ? `catalog:${catalog.id}`
-      : "catalog";
+    if (
+      this.selectedObject === this.sourceRoot
+      || this.selectedObject === this.assetRoot
+    ) {
+      this.select(null, null);
+    }
+    replaceGroupContents(this.sourceRoot, null);
+    replaceGroupContents(this.catalogAssetRoot, null);
+    if (this.catalogErrors.length > 0) {
+      this.catalogErrors = [];
+      this.emitRenderErrors();
+    }
+    this.sourceRoot.userData.selectionId = catalog
+      ? `source:${catalog.id}`
+      : "source";
+    this.assetRoot.userData.selectionId = catalog
+      ? `asset:${catalog.id}`
+      : "asset";
 
     if (!catalog) return;
-    this.emitStatus({ message: `Loading ${catalog.name}…` });
+    this.emitStatus({ message: `Loading ${catalog.name} source and asset…` });
     void this.loadCatalog(catalog, generation);
   }
 
   private async loadCatalog(catalog: CatalogEntry, generation: number): Promise<void> {
-    const contents: Object3D[] = [];
+    const source = catalog.browser.spz
+      ? (async (): Promise<Object3D> => {
+          const root = new Group();
+          try {
+            const spark = await this.ensureSparkRenderer();
+            applyCanonicalTransform(root, catalog.browser.spz!.transform);
+            const splat = new spark.SplatMesh({
+              url: catalog.browser.spz!.url,
+              fileName: catalog.browser.spz!.url.split("/").pop() || "source.spz",
+              raycastable: true,
+              lod: true,
+              lodAbove: SPLAT_LOD_THRESHOLD,
+              enableLod: true,
+            });
+            // Implicit Rx(180°): the SPZ is flipped about X first and
+            // `browser.spz.transform` (on `root`) is applied after it:
+            // world = transform · Rx(180°). src/splat/analysis.ts applies the
+            // same flip; keep both in sync.
+            splat.rotation.x = Math.PI;
+            splat.userData.studioSplat = true;
+            root.add(splat);
+            await splat.initialized;
+            if (splat.splats && splat.splats.getNumSplats() > SPLAT_LOD_THRESHOLD) {
+              await splat.createLodSplats();
+            }
+            return root;
+          } catch (error) {
+            disposeObject3D(root);
+            throw error;
+          }
+        })()
+      : Promise.resolve<Object3D | null>(null);
+    const asset = this.gltfLoader.loadAsync(catalog.browser.glb)
+      .then((gltf) => {
+        if (catalog.browser.spz) addAssetReviewEdges(gltf.scene);
+        return gltf.scene as Object3D;
+      });
+    const [sourceResult, assetResult] = await Promise.allSettled([source, asset]);
+    const loaded: string[] = [];
     const errors: string[] = [];
-    let visualLoaded = false;
-
-    if (catalog.browser.spz) {
-      try {
-        const spark = await this.ensureSparkRenderer();
-        const root = new Group();
-        applyCanonicalTransform(root, catalog.browser.spz.transform);
-        const splat = new spark.SplatMesh({
-          url: catalog.browser.spz.url,
-          fileName: catalog.browser.spz.url.split("/").pop() || "catalog.spz",
-          raycastable: true,
-          lod: true,
-          lodAbove: SPLAT_LOD_THRESHOLD,
-          enableLod: true,
-        });
-        splat.rotation.x = Math.PI;
-        splat.userData.studioSplat = true;
-        root.add(splat);
-        await splat.initialized;
-        if (splat.splats && splat.splats.getNumSplats() > SPLAT_LOD_THRESHOLD) {
-          await splat.createLodSplats();
-        }
-        contents.push(root);
-        visualLoaded = true;
-      } catch (error) {
-        errors.push(`SPZ: ${errorMessage(error)}`);
-      }
-    }
-
-    if (!visualLoaded) {
-      try {
-        const gltf = await this.gltfLoader.loadAsync(catalog.browser.glb);
-        contents.push(gltf.scene);
-      } catch (error) {
-        errors.push(`GLB: ${errorMessage(error)}`);
-      }
-    }
 
     if (this.disposed || generation !== this.catalogGeneration) {
-      for (const content of contents) disposeObject3D(content);
+      if (sourceResult.status === "fulfilled" && sourceResult.value) {
+        disposeObject3D(sourceResult.value);
+      }
+      if (assetResult.status === "fulfilled") disposeObject3D(assetResult.value);
       return;
     }
-    for (const content of contents) this.catalogRoot.add(content);
+
+    if (sourceResult.status === "fulfilled" && sourceResult.value) {
+      this.sourceRoot.add(sourceResult.value);
+      loaded.push("splat");
+    } else if (sourceResult.status === "rejected") {
+      errors.push(`catalog ${catalog.id} splat ${catalog.browser.spz?.url}: ${errorMessage(sourceResult.reason)}`);
+    }
+    if (assetResult.status === "fulfilled") {
+      this.catalogAssetRoot.add(assetResult.value);
+      loaded.push("3D asset");
+    } else {
+      errors.push(`catalog ${catalog.id} 3D asset ${catalog.browser.glb}: ${errorMessage(assetResult.reason)}`);
+    }
+
     this.presentScene();
+    this.catalogErrors = errors;
+    this.emitRenderErrors();
     this.emitStatus({
-      message: errors.length === 0
-        ? `${catalog.name} loaded`
-        : `${catalog.name} loaded with ${errors.join("; ")}`,
+      message: loaded.length > 0
+        ? `${catalog.name} loaded (${loaded.join(" + ")})${errors.length ? `; ${errors.join("; ")}` : ""}`
+        : `${catalog.name} failed to load: ${errors.join("; ")}`,
     });
   }
 
@@ -785,11 +1062,13 @@ class ViewportEngine {
     layerVisible: boolean,
   ): void {
     const ids = new Set(definitions.map((definition) => definition.id));
+    let errorsCleared = false;
     for (const [id, loaded] of this.references) {
       if (ids.has(id)) continue;
       if (this.selectedId === `reference:${id}`) this.select(null, null);
       disposeObject3D(loaded.root);
       this.references.delete(id);
+      if (this.referenceErrors.delete(id)) errorsCleared = true;
     }
 
     for (const definition of definitions) {
@@ -806,6 +1085,7 @@ class ViewportEngine {
           }
           disposeObject3D(loaded.root);
         }
+        if (this.referenceErrors.delete(definition.id)) errorsCleared = true;
         const root = new Group();
         root.name = definition.name;
         root.userData.selectionId = `reference:${definition.id}`;
@@ -826,6 +1106,7 @@ class ViewportEngine {
         layerVisible && definition.visible && definition.opacity > 0;
       setObjectOpacity(loaded.root, definition.opacity);
     }
+    if (errorsCleared) this.emitRenderErrors();
   }
 
   private ensureSparkRenderer(): Promise<SparkModule> {
@@ -937,9 +1218,9 @@ class ViewportEngine {
       ) {
         return;
       }
-      this.emitStatus({
-        message: `Reference “${definition.name}” failed: ${errorMessage(error)}`,
-      });
+      const failure = `reference ${definition.id} (${definition.name}): ${errorMessage(error)}`;
+      this.referenceErrors.set(definition.id, failure);
+      this.emitRenderErrors(failure);
     }
   }
 
@@ -952,9 +1233,6 @@ class ViewportEngine {
     this.renderer.domElement.style.cursor =
       mode === "measure" ? "crosshair" : "default";
     if (mode !== "measure") this.clearPendingMeasurement();
-    if (mode === "translate" || mode === "rotate") {
-      this.select(this.tableRoot, "table");
-    }
     this.syncTransformControls();
   }
 
@@ -964,20 +1242,21 @@ class ViewportEngine {
         ? this.currentMode
         : null;
     const canTransform =
-      transformMode !== null &&
-      this.tableRoot.visible &&
-      this.selectedObject === this.tableRoot;
-    if (!canTransform) {
+      transformMode !== null
+      && this.selectedObject !== null
+      && isObjectVisible(this.selectedObject)
+      && this.selectedId?.startsWith("entity:") === true;
+    if (!canTransform || !this.selectedObject) {
       this.transformControls.detach();
       return;
     }
     this.transformControls.setMode(transformMode);
-    this.transformControls.attach(this.tableRoot);
+    this.transformControls.attach(this.selectedObject);
   }
 
   private updateSelectionVisibility(): void {
     if (!this.selectedObject) return;
-    if (!this.selectedObject.visible) {
+    if (!isObjectVisible(this.selectedObject)) {
       this.clearSelectionHelper();
     } else if (!this.selectionHelper) {
       this.selectionHelper = new BoxHelper(this.selectedObject, 0x5fc4f0);
@@ -992,7 +1271,7 @@ class ViewportEngine {
     this.clearSelectionHelper();
     this.selectedObject = object;
     this.selectedId = id;
-    if (object?.visible) {
+    if (object && isObjectVisible(object)) {
       this.selectionHelper = new BoxHelper(object, 0x5fc4f0);
       this.selectionHelper.name = "Selection bounds";
       this.scene.add(this.selectionHelper);
@@ -1054,15 +1333,14 @@ class ViewportEngine {
   private pickRoots(): Object3D[] {
     const roots = this.pickRootBuffer;
     roots.length = 0;
-    if (this.tableRoot.visible) roots.push(this.tableRoot);
-    if (this.catalogRoot.visible && this.catalogRoot.children.length) {
-      roots.push(this.catalogRoot);
+    if (this.sourceRoot.visible && this.sourceRoot.children.length) {
+      roots.push(this.sourceRoot);
+    }
+    if (this.assetRoot.visible && this.assetRoot.children.length) {
+      roots.push(this.assetRoot);
     }
     if (this.collisionRoot.visible && this.collisionRoot.children.length) {
       roots.push(this.collisionRoot);
-    }
-    if (this.entityRoot.visible && this.entityRoot.children.length) {
-      roots.push(this.entityRoot);
     }
     if (this.referenceRoot.visible) {
       for (const reference of this.references.values()) {
@@ -1164,10 +1442,9 @@ class ViewportEngine {
   private visibleBounds(): Box3 {
     TMP_BOX.makeEmpty();
     const roots: Object3D[] = [
-      this.tableRoot,
-      this.catalogRoot,
+      this.sourceRoot,
+      this.assetRoot,
       this.collisionRoot,
-      this.entityRoot,
     ];
     if (this.referenceRoot.visible) {
       for (const reference of this.references.values()) {
@@ -1176,15 +1453,24 @@ class ViewportEngine {
     }
     for (const root of roots) {
       if (!root.visible || root.children.length === 0) continue;
-      TMP_BOX.expandByObject(root);
-      root.traverse((object) => {
-        if (!isStudioSplat(object)) return;
-        object.updateWorldMatrix(true, false);
-        const splatBounds = object.getBoundingBox();
-        if (!splatBounds.isEmpty()) {
-          splatBounds.applyMatrix4(object.matrixWorld);
-          TMP_BOX.union(splatBounds);
+      root.updateWorldMatrix(true, true);
+      // traverseVisible skips hidden subtrees (e.g. the catalog GLB while scene
+      // entities replace it), so framing matches what is actually drawn.
+      root.traverseVisible((object) => {
+        if (isStudioSplat(object)) {
+          const splatBounds = object.getBoundingBox();
+          if (!splatBounds.isEmpty()) {
+            splatBounds.applyMatrix4(object.matrixWorld);
+            TMP_BOX.union(splatBounds);
+          }
+          return;
         }
+        const geometry = "geometry" in object ? object.geometry : undefined;
+        if (!(geometry instanceof BufferGeometry)) return;
+        if (!geometry.boundingBox) geometry.computeBoundingBox();
+        if (!geometry.boundingBox || geometry.boundingBox.isEmpty()) return;
+        TMP_OBJECT_BOX.copy(geometry.boundingBox).applyMatrix4(object.matrixWorld);
+        TMP_BOX.union(TMP_OBJECT_BOX);
       });
     }
     if (TMP_BOX.isEmpty()) {
@@ -1199,7 +1485,7 @@ class ViewportEngine {
       this.frameScene();
     } else {
       this.initializedView = true;
-      this.setView("perspective");
+      this.setView(this.viewPreset);
     }
     if (this.scenePresented) return;
     this.scenePresented = true;
@@ -1248,7 +1534,7 @@ export const ThreeViewport = forwardRef<
     manifest,
     catalogPending,
     mode,
-    onTableTransformChange,
+    onEntityTransformChange,
     onMeasurement,
     onStatus,
   },
@@ -1257,12 +1543,12 @@ export const ThreeViewport = forwardRef<
   const hostRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<ViewportEngine | null>(null);
   const callbacksRef = useRef({
-    onTableTransformChange,
+    onEntityTransformChange,
     onMeasurement,
     onStatus,
   });
   callbacksRef.current = {
-    onTableTransformChange,
+    onEntityTransformChange,
     onMeasurement,
     onStatus,
   };
@@ -1284,8 +1570,8 @@ export const ThreeViewport = forwardRef<
     const host = hostRef.current;
     if (!host) return;
     const engine = new ViewportEngine(host, {
-      tableTransformChanged(transform): void {
-        callbacksRef.current.onTableTransformChange(transform);
+      entityTransformChanged(id, transform): void {
+        callbacksRef.current.onEntityTransformChange(id, transform);
       },
       measurementCreated(measurement): void {
         callbacksRef.current.onMeasurement(measurement);
@@ -1301,7 +1587,7 @@ export const ThreeViewport = forwardRef<
       engineRef.current = null;
       engine.dispose();
     };
-  }, []);
+  }, [ViewportEngine]);
 
   useEffect(() => {
     engineRef.current?.update(document, catalog, catalogPending, manifest, mode);
@@ -1311,7 +1597,7 @@ export const ThreeViewport = forwardRef<
     <div
       ref={hostRef}
       role="application"
-      aria-label="Interactive metric Z-up workcell viewport"
+      aria-label="Interactive metric Z-up asset viewport"
       tabIndex={0}
       style={VIEWPORT_STYLE}
     />

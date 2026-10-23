@@ -18,6 +18,7 @@ import {
   Sprite,
   SpriteMaterial,
   SRGBColorSpace,
+  TextureLoader,
   Vector3,
 } from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -28,6 +29,7 @@ import type {
   SceneMaterial,
 } from "../domain/types";
 import { applyCanonicalTransform } from "./coordinates";
+import { createParametricTable } from "./ParametricTable";
 import { disposeObject3D } from "./dispose";
 
 interface EntityRuntime {
@@ -65,6 +67,16 @@ function errorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) return error.message;
   return String(error);
 }
+const TEXTURE_LOADER = new TextureLoader();
+const BOX_FACE_MATERIAL_INDEX = {
+  "x-positive": 0,
+  "x-negative": 1,
+  "y-positive": 2,
+  "y-negative": 3,
+  "z-positive": 4,
+  "z-negative": 5,
+} as const;
+
 
 function createMaterial(definition: SceneMaterial): MeshStandardMaterial {
   return new MeshStandardMaterial({
@@ -77,22 +89,66 @@ function createMaterial(definition: SceneMaterial): MeshStandardMaterial {
   });
 }
 
+function createBoxMaterial(
+  definition: SceneMaterial,
+): MeshStandardMaterial | MeshStandardMaterial[] {
+  if (!definition.texture) return createMaterial(definition);
+  const base = createMaterial(definition);
+  const map = TEXTURE_LOADER.load(definition.texture.dataUrl);
+  map.colorSpace = SRGBColorSpace;
+  map.minFilter = LinearFilter;
+  map.magFilter = LinearFilter;
+  const textured = new MeshStandardMaterial({
+    color: 0xffffff,
+    map,
+    metalness: 0.08,
+    roughness: 0.72,
+    opacity: definition.opacity,
+    transparent: definition.opacity < 1,
+    depthWrite: definition.opacity >= 1,
+  });
+  const materials = Array.from({ length: 6 }, () => base);
+  materials[BOX_FACE_MATERIAL_INDEX[definition.texture.face]] = textured;
+  return materials;
+}
+
 function markMesh(mesh: Mesh): Mesh {
   mesh.castShadow = false;
   mesh.receiveShadow = false;
   return mesh;
 }
 
+const LABEL_FONT_PX = 48;
+const LABEL_PADDING_PX = 24;
+const LABEL_HEIGHT_PX = 128;
+/** Widest label texture; WebGL guarantees at least 4096 px per texture side. */
+const LABEL_MAX_WIDTH_PX = 4096;
+
+/**
+ * Labels are camera-facing sprites: entity rotation is ignored and `size` is the
+ * sprite height in metres. The canvas grows with the text so nothing is
+ * clipped; text wider than the maximum texture is drawn with a smaller font and
+ * keeps the full string.
+ */
 function createLabel(definition: LabelSceneEntity): Sprite | null {
   const canvas = window.document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 128;
   const context = canvas.getContext("2d");
   if (!context) return null;
 
+  const font = (pixels: number) => `600 ${pixels}px 'IBM Plex Mono', monospace`;
+  context.font = font(LABEL_FONT_PX);
+  const naturalWidth = Math.ceil(context.measureText(definition.text).width) + (LABEL_PADDING_PX * 2);
+  const width = Math.min(LABEL_MAX_WIDTH_PX, Math.max(LABEL_HEIGHT_PX, naturalWidth));
+  const fontPx = naturalWidth > LABEL_MAX_WIDTH_PX
+    ? Math.max(1, Math.floor(LABEL_FONT_PX * (LABEL_MAX_WIDTH_PX - (LABEL_PADDING_PX * 2)) / (naturalWidth - (LABEL_PADDING_PX * 2))))
+    : LABEL_FONT_PX;
+  canvas.width = width;
+  canvas.height = LABEL_HEIGHT_PX;
+
+  // Resizing the canvas resets the 2D context state.
   context.fillStyle = definition.backgroundColor;
   context.fillRect(0, 0, canvas.width, canvas.height);
-  context.font = "600 48px 'IBM Plex Mono', monospace";
+  context.font = font(fontPx);
   context.textAlign = "center";
   context.textBaseline = "middle";
   context.fillStyle = definition.color;
@@ -108,8 +164,7 @@ function createLabel(definition: LabelSceneEntity): Sprite | null {
     depthWrite: false,
   }));
   sprite.renderOrder = 20;
-  const width = definition.size * Math.min(8, Math.max(2, definition.text.length * 0.62));
-  sprite.scale.set(width, definition.size, 1);
+  sprite.scale.set(definition.size * (canvas.width / canvas.height), definition.size, 1);
   return sprite;
 }
 
@@ -166,14 +221,29 @@ export class SceneEntityRenderer {
   private readonly runtimes = new Map<string, EntityRuntime>();
   private readonly scaleAnimations: ScaleAnimation[] = [];
   private readonly poofAnimations: PoofAnimation[] = [];
+  /** Current model GLB load failures keyed by entity id. */
+  private readonly modelErrors = new Map<string, string>();
   private definitions = new Map<string, SceneEntity>();
   private lastEntities: readonly SceneEntity[] | null = null;
   private disposed = false;
 
+  /**
+   * @param loadErrorsChanged called whenever `loadErrors()` changes; `failure` is
+   * the newly added error, or null when entries were cleared.
+   */
   constructor(
     private readonly sceneRoot: Group,
-    private readonly reportError: (message: string) => void,
+    private readonly loadErrorsChanged: (failure: string | null) => void,
   ) {}
+
+  /** Current entity load failures, each `"<what>: <message>"`. */
+  loadErrors(): string[] {
+    return [...this.modelErrors.values()];
+  }
+
+  rootFor(entityId: string): Group | null {
+    return this.runtimes.get(entityId)?.root ?? null;
+  }
 
   update(entities: readonly SceneEntity[]): void {
     if (this.disposed || entities === this.lastEntities) return;
@@ -213,11 +283,13 @@ export class SceneEntityRenderer {
     const removals = [...changed]
       .filter((id) => this.runtimes.has(id))
       .sort((left, right) => depthOf(right, this.definitions) - depthOf(left, this.definitions));
+    let errorsCleared = false;
     for (const id of removals) {
       const runtime = this.runtimes.get(id);
       if (!runtime) continue;
       this.cancelScaleAnimations(runtime.root);
       this.runtimes.delete(id);
+      if (this.modelErrors.delete(id)) errorsCleared = true;
       if (removedIds.has(id)) {
         if (topRemovedIds.has(id)) this.startDisappearance(runtime);
         continue;
@@ -253,6 +325,7 @@ export class SceneEntityRenderer {
     }
 
     this.definitions = nextDefinitions;
+    if (errorsCleared) this.loadErrorsChanged(null);
   }
 
   tick(now = performance.now()): void {
@@ -321,6 +394,7 @@ export class SceneEntityRenderer {
     this.scaleAnimations.length = 0;
     this.poofAnimations.length = 0;
     this.runtimes.clear();
+    this.modelErrors.clear();
     this.definitions.clear();
     this.lastEntities = null;
   }
@@ -447,7 +521,7 @@ export class SceneEntityRenderer {
       case "box":
         root.add(markMesh(new Mesh(
           new BoxGeometry(...definition.size),
-          createMaterial(definition.material),
+          createBoxMaterial(definition.material),
         )));
         return;
       case "sphere":
@@ -474,6 +548,9 @@ export class SceneEntityRenderer {
         root.add(mesh);
         return;
       }
+      case "procedural":
+        root.add(createParametricTable(definition.parameters));
+        return;
       case "label": {
         const label = createLabel(definition);
         if (label) root.add(label);
@@ -485,10 +562,14 @@ export class SceneEntityRenderer {
             disposeObject3D(gltf.scene);
             return;
           }
+          // No up-axis conversion: model GLBs must already be authored Z-up
+          // (package exporters use export_yup=False). A standard Y-up glTF lies on its side.
           root.add(gltf.scene);
         }).catch((error: unknown) => {
           if (this.disposed || this.runtimes.get(definition.id) !== runtime) return;
-          this.reportError(`Entity “${definition.name}” failed to load: ${errorMessage(error)}`);
+          const failure = `entity ${definition.id} model ${definition.source}: ${errorMessage(error)}`;
+          this.modelErrors.set(definition.id, failure);
+          this.loadErrorsChanged(failure);
         });
         return;
       case "group":

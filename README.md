@@ -6,7 +6,11 @@ system or runtime; work on one never requires touching the other.
 | Product | Folder | What it is |
 | --- | --- | --- |
 | **AR Pose Capture** | [`ar-pose-capture/`](ar-pose-capture/README.md) | iPhone ARKit camera app (Xcode project) and the Python desktop receiver that collects its photos and camera poses over USB or Wi-Fi |
-| **Workcell Studio** | [`studio/`](studio/README.md) | Bun + Vite + Three.js browser editor that turns a captured splat into simulator-ready assets in [`assets/`](assets/) |
+| **Asset Studio** | [`studio/`](studio/README.md) | Bun + Vite + React + Three.js workspace that turns a Gaussian splat into a simulator-ready 3D asset; packages live in [`assets/`](assets/) |
+
+Agents should read [`AGENTS.md`](AGENTS.md) first (Asset Studio), or
+[`ar-pose-capture/AGENTS.md`](ar-pose-capture/AGENTS.md) for the iOS app and
+receiver.
 
 ## AR Pose Capture
 
@@ -21,21 +25,25 @@ python3 receive_capture.py --wifi --output captures
 See [`ar-pose-capture/README.md`](ar-pose-capture/README.md) for signing, capture
 modes, USB and Wi-Fi setup, output files and Metashape import.
 
-## Workcell Studio
+## Asset Studio
 
-`studio/` is a local browser editor for the reconstructed welding cell in
-`assets/welding_cell`. Its catalog displays the captured workcell as a compressed,
-view-independent SPZ and keeps the aligned semantic GLB as a fallback. The
-captured table is shown by default; the generated parametric table starts hidden
-to avoid drawing a second table over the scan. Studio provides a metric, Z-up
-Three.js work surface for local scan/splat references, measurements, collision review, a revisioned local
-scene-control API, constrained Python scene scripts, and fixed-target
-Blender/OpenUSD/MuJoCo builds. Studio uses a balanced multi-axis viewer light rig; generated simulator assets contain no scene lights.
+`studio/` is a local browser workspace for a generic asset pipeline:
 
-See [`studio/README.md`](studio/README.md) for setup, API and Python examples,
-supported reference formats, coordinate conventions, and the loopback service
-boundary. The environment assets do not include the robot, URDF, articulation,
-controllers, or hardware access.
+```text
+Gaussian splat → 3D asset → Isaac Sim / MuJoCo / Unreal Engine
+```
+
+Catalog packages keep the source splat, generated GLB, collision geometry, and
+target artifacts aligned in metric Z-up coordinates. The bundled
+`assets/welding_cell` and `assets/reception_room` directories are reference
+packages, not product-specific editor constraints. Studio also provides local
+source imports, measurements, semantic scene entities, a revisioned loopback
+API, a stdio Scene MCP for live object function calls, constrained Python scene
+scripts, and configurable fixed-target exporters.
+
+See [`studio/README.md`](studio/README.md) for setup, the package contract,
+Scene MCP configuration, scene-control API, Python helpers, coordinate
+conventions, and exporter profile configuration.
 
 ## License
 
